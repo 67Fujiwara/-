@@ -7,9 +7,11 @@ import GanttChart from './components/GanttChart.jsx';
 import ProjectDrawer from './components/ProjectDrawer.jsx';
 import CompletedPage from './components/CompletedPage.jsx';
 import DeptFilterMenu from './components/DeptFilterMenu.jsx';
+import DataTransfer from './components/DataTransfer.jsx';
 
 export default function App() {
   const {
+    projects,
     activeProjects,
     completedProjects,
     addProject,
@@ -18,6 +20,7 @@ export default function App() {
     completeProject,
     restoreProject,
     moveProjectToIndex,
+    replaceProjects,
     addTodo,
     toggleTodo,
     removeTodo,
@@ -126,22 +129,32 @@ export default function App() {
           <p>各工程の担当と進み具合を横一列で確認できます。</p>
         </div>
 
-        <nav className="tabs" aria-label="ページ切り替え">
-          <button
-            type="button"
-            className={`tab ${page === 'active' ? 'is-active' : ''}`}
-            onClick={() => setPage('active')}
-          >
-            進行中 <span className="tab__count">{activeProjects.length}</span>
-          </button>
-          <button
-            type="button"
-            className={`tab ${page === 'completed' ? 'is-active' : ''}`}
-            onClick={() => setPage('completed')}
-          >
+        <div className="topbar__actions">
+          <DataTransfer
+            projects={projects}
+            onImport={(next) => {
+              replaceProjects(next);
+              setSelectedId(null);
+              setPage('active');
+            }}
+          />
+          <nav className="tabs" aria-label="ページ切り替え">
+            <button
+              type="button"
+              className={`tab ${page === 'active' ? 'is-active' : ''}`}
+              onClick={() => setPage('active')}
+            >
+              進行中 <span className="tab__count">{activeProjects.length}</span>
+            </button>
+            <button
+              type="button"
+              className={`tab ${page === 'completed' ? 'is-active' : ''}`}
+              onClick={() => setPage('completed')}
+            >
             完了 <span className="tab__count">{completedProjects.length}</span>
-          </button>
-        </nav>
+            </button>
+          </nav>
+        </div>
       </header>
 
       {page === 'active' && (

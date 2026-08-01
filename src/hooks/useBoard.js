@@ -85,6 +85,9 @@ export function useBoard() {
     });
   }, []);
 
+  /** 読み込んだデータで全体を置き換える（JSON 読み込み用） */
+  const replaceProjects = useCallback((next) => setProjects(next), []);
+
   /* ---------- TODO ---------- */
 
   const addTodo = useCallback(
@@ -179,6 +182,7 @@ export function useBoard() {
     completeProject,
     restoreProject,
     moveProjectToIndex,
+    replaceProjects,
     addTodo,
     toggleTodo,
     removeTodo,

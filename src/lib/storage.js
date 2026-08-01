@@ -34,6 +34,30 @@ export function loadProjects() {
   }
 }
 
+/** 書き出し用の JSON 文字列（人が見ても分かるように整形する） */
+export function toExportJson(projects) {
+  return JSON.stringify(
+    { version: SCHEMA_VERSION, exportedAt: new Date().toISOString(), projects },
+    null,
+    2
+  );
+}
+
+/**
+ * 読み込んだ JSON をプロジェクト配列に変換する。
+ * 書き出し形式のほか、旧形式（配列だけ／共通工程つき）もそのまま読める。
+ * 内容が違う場合は例外を投げるので、呼び出し側でメッセージを出すこと。
+ */
+export function parseImportedJson(text) {
+  const parsed = JSON.parse(text);
+  const list = Array.isArray(parsed) ? parsed : parsed?.projects;
+  if (!Array.isArray(list)) {
+    throw new Error('プロジェクトの一覧が見つかりません。このアプリで書き出したファイルを選んでください。');
+  }
+  const shared = parsed?.departments ? normalizeDepartments(parsed.departments) : DEFAULT_DEPARTMENTS;
+  return list.map((p) => normalizeProject(p, shared));
+}
+
 export function saveProjects(projects) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: SCHEMA_VERSION, projects }));

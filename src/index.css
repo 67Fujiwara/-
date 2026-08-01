@@ -1721,3 +1721,37 @@ textarea {
 .field__url {
   font-size: 12px;
 }
+
+/* ---------- データの書き出し / 読み込み ---------- */
+.topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.datatransfer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.datatransfer__file {
+  display: none;
+}
+
+.datatransfer__msg {
+  font-size: 11px;
+  color: #166534;
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  border-radius: 999px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+
+.datatransfer__msg.is-error {
+  color: var(--danger);
+  background: #fee2e2;
+  border-color: #fecaca;
+}
