@@ -15,11 +15,7 @@ export default function GanttChart({
   deptFilters,
   focusTodaySignal,
   onSelect,
-  onMoveUp,
-  onMoveDown,
-  onMoveTop,
   onReorder,
-  onAdd,
 }) {
   const scrollRef = useRef(null);
   const [dragIndex, setDragIndex] = useState(null);
@@ -85,7 +81,7 @@ export default function GanttChart({
           <div className="gantt__head">
             <div className="gantt__head-left">
               <span>プロジェクト / 担当</span>
-              <span className="gantt__hint">ドラッグまたは ↑↓ で並べ替え</span>
+              <span className="gantt__hint">行をドラッグすると並べ替えできます</span>
             </div>
             <div className="gantt__head-track" style={{ width: timeline.width }}>
               <div className="scale scale--months">
@@ -115,7 +111,6 @@ export default function GanttChart({
                 key={project.id}
                 project={project}
                 index={index}
-                total={projects.length}
                 timeline={timeline}
                 rowHeight={rowHeightOf(project)}
                 selected={project.id === selectedId}
@@ -123,9 +118,6 @@ export default function GanttChart({
                 dragging={dragIndex === index}
                 dropTarget={dropIndex === index && dragIndex !== index}
                 onSelect={onSelect}
-                onMoveUp={onMoveUp}
-                onMoveDown={onMoveDown}
-                onMoveTop={onMoveTop}
                 onBarHover={handleBarHover}
                 onHoverEnd={() => setHover(null)}
                 onDragStart={handleDragStart}
@@ -134,15 +126,6 @@ export default function GanttChart({
                 onDrop={handleDrop}
               />
             ))}
-
-            <div className="gantt__addrow">
-              <div className="gantt__addrow-left">
-                <button type="button" className="btn btn--ghost btn--block" onClick={onAdd}>
-                  ＋ プロジェクトを最下行に追加
-                </button>
-              </div>
-              <div className="gantt__addrow-track" style={{ width: timeline.width }} />
-            </div>
 
             <div
               className="today-line"
@@ -157,7 +140,7 @@ export default function GanttChart({
 
       {projects.length === 0 && (
         <p className="gantt__empty">
-          進行中のプロジェクトはありません。「＋ プロジェクトを最下行に追加」から作成してください。
+          進行中のプロジェクトはありません。右上の「＋ プロジェクト追加」から作成してください。
         </p>
       )}
 

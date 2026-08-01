@@ -17,8 +17,6 @@ export default function App() {
     removeProject,
     completeProject,
     restoreProject,
-    moveProject,
-    moveProjectToTop,
     moveProjectToIndex,
     addTodo,
     toggleTodo,
@@ -204,11 +202,7 @@ export default function App() {
               setSelectedId(id);
               setNewProjectId(null);
             }}
-            onMoveUp={(id) => moveProject(id, -1)}
-            onMoveDown={(id) => moveProject(id, 1)}
-            onMoveTop={moveProjectToTop}
             onReorder={moveProjectToIndex}
-            onAdd={handleAdd}
           />
         ) : (
           <CompletedPage

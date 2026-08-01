@@ -15,7 +15,6 @@ import SlackLink from './SlackLink.jsx';
 export default function GanttRow({
   project,
   index,
-  total,
   timeline,
   rowHeight,
   selected,
@@ -23,9 +22,6 @@ export default function GanttRow({
   dragging,
   dropTarget,
   onSelect,
-  onMoveUp,
-  onMoveDown,
-  onMoveTop,
   onBarHover,
   onHoverEnd,
   onDragStart,
@@ -75,35 +71,6 @@ export default function GanttRow({
             {project.name}
           </button>
           <SlackLink url={project.slackUrl} />
-          <span className="grow__order-btns">
-            <button
-              type="button"
-              className="iconbtn"
-              title="最優先（一番上）へ"
-              disabled={index === 0}
-              onClick={() => onMoveTop(project.id)}
-            >
-              ⤒
-            </button>
-            <button
-              type="button"
-              className="iconbtn"
-              title="1つ上へ"
-              disabled={index === 0}
-              onClick={() => onMoveUp(project.id)}
-            >
-              ↑
-            </button>
-            <button
-              type="button"
-              className="iconbtn"
-              title="1つ下へ"
-              disabled={index === total - 1}
-              onClick={() => onMoveDown(project.id)}
-            >
-              ↓
-            </button>
-          </span>
         </div>
 
         <div className="grow__meta">

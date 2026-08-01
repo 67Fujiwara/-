@@ -76,22 +76,6 @@ export function useBoard() {
     });
   }, []);
 
-  const moveProject = useCallback((id, delta) => {
-    setProjects((prev) => {
-      const from = prev.filter((p) => !p.completedAt).findIndex((p) => p.id === id);
-      if (from < 0) return prev;
-      return reorderActive(prev, from, from + delta);
-    });
-  }, []);
-
-  const moveProjectToTop = useCallback((id) => {
-    setProjects((prev) => {
-      const from = prev.filter((p) => !p.completedAt).findIndex((p) => p.id === id);
-      if (from < 0) return prev;
-      return reorderActive(prev, from, 0);
-    });
-  }, []);
-
   /** ドラッグ&ドロップ用: 進行中リスト内のインデックス指定で並べ替える */
   const moveProjectToIndex = useCallback((id, toIndex) => {
     setProjects((prev) => {
@@ -194,8 +178,6 @@ export function useBoard() {
     removeProject,
     completeProject,
     restoreProject,
-    moveProject,
-    moveProjectToTop,
     moveProjectToIndex,
     addTodo,
     toggleTodo,

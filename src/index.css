@@ -570,19 +570,6 @@ textarea {
   text-decoration: underline;
 }
 
-.grow__order-btns {
-  display: flex;
-  gap: 1px;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-
-.grow:hover .grow__order-btns,
-.grow.is-selected .grow__order-btns,
-.grow__left:focus-within .grow__order-btns {
-  opacity: 1;
-}
-
 .grow__meta {
   display: flex;
   align-items: center;
@@ -759,26 +746,6 @@ textarea {
   padding: 0 5px;
   border-radius: 0 4px 4px 0;
   white-space: nowrap;
-}
-
-.gantt__addrow {
-  display: flex;
-  background: var(--surface);
-}
-
-.gantt__addrow-left {
-  width: var(--left-w);
-  flex: 0 0 var(--left-w);
-  position: sticky;
-  left: 0;
-  z-index: 3;
-  background: var(--surface);
-  border-right: 1px solid var(--line-strong);
-  padding: 10px;
-}
-
-.gantt__addrow-track {
-  flex: 0 0 auto;
 }
 
 .gantt__empty {
