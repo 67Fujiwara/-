@@ -1707,3 +1707,50 @@ textarea {
   border-radius: 999px;
   padding: 0 6px;
 }
+
+/* ---------- Slack スレッドへのリンク ---------- */
+.slack-link {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  background: #4a154b;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  transition: filter 0.12s ease, transform 0.12s ease;
+}
+
+.slack-link:hover {
+  filter: brightness(1.25);
+  transform: translateY(-1px);
+}
+
+.slack-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.ccard__name,
+.drawer__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.field__hint {
+  margin-left: 6px;
+  font-weight: 400;
+  font-size: 10px;
+  color: var(--line-strong);
+}
+
+.field__url {
+  font-size: 12px;
+}

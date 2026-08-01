@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { formatJP, toISO } from '../lib/date.js';
 import { departmentsOf, phaseOf, projectRange, todoStats } from '../lib/project.js';
 import DeptChip from './DeptChip.jsx';
+import SlackLink from './SlackLink.jsx';
 import TodoList from './TodoList.jsx';
 
 /** 完了プロジェクト一覧（別ページ） */
@@ -53,7 +54,10 @@ export default function CompletedPage({ projects, onRestore, onDelete }) {
                 <div className="ccard__title">
                   <span className="ccard__check">✓</span>
                   <div>
-                    <h3>{project.name}</h3>
+                    <h3 className="ccard__name">
+                      {project.name}
+                      <SlackLink url={project.slackUrl} />
+                    </h3>
                     <p className="ccard__sub">
                       {project.client || '客先未設定'}
                       <span className="dot">・</span>

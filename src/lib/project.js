@@ -23,6 +23,7 @@ export function createProject(input = {}) {
     client: input.client?.trim() || '',
     note: input.note?.trim() || '',
     launchDate: input.launchDate || '',
+    slackUrl: input.slackUrl || '',
     departments,
     phases: { ...emptyPhases(departments), ...(input.phases || {}) },
     todos: input.todos || [],
@@ -62,6 +63,7 @@ export function normalizeProject(raw, fallbackDepartments = DEFAULT_DEPARTMENTS)
     client: raw?.client || '',
     note: raw?.note || '',
     launchDate: typeof raw?.launchDate === 'string' ? raw.launchDate : '',
+    slackUrl: typeof raw?.slackUrl === 'string' ? raw.slackUrl : '',
     departments,
     phases,
     todos: Array.isArray(raw?.todos)
@@ -84,6 +86,20 @@ export function clampProgress(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return 0;
   return Math.min(100, Math.max(0, Math.round(n)));
+}
+
+/**
+ * リンクとして開いてよい URL かどうか。
+ * javascript: などのスキームを踏まないよう http/https だけを許可する。
+ */
+export function isSafeUrl(url) {
+  if (typeof url !== 'string' || !url.trim()) return false;
+  try {
+    const { protocol } = new URL(url.trim());
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 /** このプロジェクトの工程一覧 */

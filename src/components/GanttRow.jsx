@@ -9,6 +9,7 @@ import {
   todosOfDept,
 } from '../lib/project.js';
 import DeptChip from './DeptChip.jsx';
+import SlackLink from './SlackLink.jsx';
 
 /** ガントチャートの1行 = 1プロジェクト。行の中に工程ごとのレーンを並べて表示する。 */
 export default function GanttRow({
@@ -73,6 +74,7 @@ export default function GanttRow({
           <button type="button" className="grow__name" onClick={() => onSelect(project.id)}>
             {project.name}
           </button>
+          <SlackLink url={project.slackUrl} />
           <span className="grow__order-btns">
             <button
               type="button"

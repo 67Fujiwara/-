@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { clampProgress, departmentsOf, phaseOf, phaseProgress, projectProgress } from '../lib/project.js';
+import {
+  clampProgress,
+  departmentsOf,
+  isSafeUrl,
+  phaseOf,
+  phaseProgress,
+  projectProgress,
+} from '../lib/project.js';
 import TodoList from './TodoList.jsx';
+import SlackLink from './SlackLink.jsx';
 
 /** 選択中プロジェクトの詳細（担当・工程・TODO）を編集するサイドパネル */
 export default function ProjectDrawer({
@@ -58,7 +66,10 @@ export default function ProjectDrawer({
       <header className="drawer__head">
         <div>
           <span className="drawer__eyebrow">プロジェクト詳細</span>
-          <h3>{project.name}</h3>
+          <h3 className="drawer__name">
+            {project.name}
+            <SlackLink url={project.slackUrl} />
+          </h3>
         </div>
         <button type="button" className="iconbtn iconbtn--lg" onClick={onClose} title="閉じる（Esc）">
           ×
@@ -92,6 +103,23 @@ export default function ProjectDrawer({
               value={project.launchDate}
               onChange={(e) => onUpdate(project.id, { launchDate: e.target.value })}
             />
+          </label>
+          <label className="field">
+            <span>
+              Slack スレッド
+              <span className="field__hint">URLを貼り付け（表示はアイコンのみ）</span>
+            </span>
+            <input
+              type="url"
+              inputMode="url"
+              className="field__url"
+              value={project.slackUrl}
+              placeholder="https://xxx.slack.com/archives/..."
+              onChange={(e) => onUpdate(project.id, { slackUrl: e.target.value })}
+            />
+            {project.slackUrl && !isSafeUrl(project.slackUrl) && (
+              <p className="warn">http:// または https:// で始まるURLを貼り付けてください。</p>
+            )}
           </label>
           <label className="field">
             <span>メモ</span>
