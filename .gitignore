@@ -1,6 +1,5 @@
 node_modules
 dist
-dist-single
 dist-ssr
 .vite
 *.local

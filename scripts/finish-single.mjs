@@ -2,7 +2,7 @@
 import { readdir, rename, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
-const OUT_DIR = 'dist-single';
+const OUT_DIR = 'release';
 const FILE_NAME = 'project-board.html';
 
 const src = join(OUT_DIR, 'index.html');
@@ -22,4 +22,5 @@ for (const entry of await readdir(OUT_DIR)) {
 
 const { size } = await stat(dest);
 console.log(`\n✓ ${dest} を作成しました（${(size / 1024).toFixed(0)} KB）`);
-console.log('  このファイル1つをダイレクトクラウドに置き、ダブルクリックで開けます。\n');
+console.log('  このファイル1つをダイレクトクラウドに置き、ダブルクリックで開けます。');
+console.log('  リポジトリにもこのファイルを含めているので、GitHub から直接ダウンロードもできます。\n');

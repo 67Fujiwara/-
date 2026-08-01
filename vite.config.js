@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), ...(single ? [viteSingleFile()] : [])],
     build: single
       ? {
-          outDir: 'dist-single',
+          outDir: 'release',
           cssCodeSplit: false,
           assetsInlineLimit: 100_000_000,
           chunkSizeWarningLimit: 4000,

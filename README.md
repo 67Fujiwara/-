@@ -18,7 +18,7 @@ npm run dev     # 開発サーバー起動 → http://localhost:5173
 ```bash
 npm run build         # dist/ に出力（Webサーバーに置く場合）
 npm run preview       # 出力したファイルの動作確認
-npm run build:single  # dist-single/project-board.html を出力（HTML 1ファイル）
+npm run build:single  # release/project-board.html を出力（HTML 1ファイル）
 ```
 
 ## 主な機能
@@ -83,6 +83,7 @@ npm run build:single  # dist-single/project-board.html を出力（HTML 1ファ�
 ## 構成
 
 ```
+release/project-board.html    配布用の単一HTML（ビルド済み。そのまま配れます）
 scripts/finish-single.mjs     単一HTMLビルドの後始末（ファイル名の変更）
 src/
   App.jsx                     画面全体（タブ・ツールバー・状態の受け渡し）
@@ -111,14 +112,22 @@ src/
 
 サーバーを用意せずに社内で共有したい場合の手順です。
 
-### 1. HTML 1ファイルにまとめる
+### 1. HTML 1ファイルを用意する
+
+ビルド済みのファイルを**リポジトリに含めてあります**。GitHub から直接ダウンロードできます。
+
+1. GitHub でこのリポジトリを開く
+2. `release/project-board.html` を開く
+3. 右上の **Download raw file**（下向き矢印のアイコン）で保存
+
+自分でビルドする場合は次のコマンドです（同じファイルが `release/` に上書き出力されます）。
 
 ```bash
 npm run build:single
 ```
 
-`dist-single/project-board.html` が1つだけできます（約250KB）。
-JavaScript も CSS も中に埋め込まれているので、**このファイル単体で動きます**。
+約250KBの HTML が1つだけできます。JavaScript も CSS も中に埋め込まれているので、
+**このファイル単体で動きます**（インストール不要、ネット接続も不要）。
 
 ### 2. 置いて配る
 
@@ -127,8 +136,7 @@ JavaScript も CSS も中に埋め込まれているので、**このファイ�
 - ダウンロードして**ダブルクリック**
 - または同期フォルダ／マウントしたドライブ上で**直接ダブルクリック**
 
-これだけで開きます（インストール不要、ネット接続も不要）。
-アプリを更新したいときは、この HTML 1つを差し替えます。
+これだけで開きます。アプリを更新したいときは、この HTML 1つを差し替えます。
 
 ### 3. データの受け渡し
 
