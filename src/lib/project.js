@@ -1,3 +1,4 @@
+import { DEFAULT_DEPARTMENTS } from '../constants.js';
 import { parseDate, spanDays, todayISO } from './date.js';
 import { normalizeDepartments } from './departments.js';
 
@@ -13,14 +14,16 @@ export function emptyPhases(departments) {
   return Object.fromEntries(departments.map((d) => [d.id, emptyPhase()]));
 }
 
-export function createProject(input = {}, departments = []) {
+/** 工程はプロジェクトごとに持つ。新規作成時は既定の工程を写して初期値にする。 */
+export function createProject(input = {}) {
+  const departments = normalizeDepartments(input.departments);
   return {
     id: createId(),
     name: input.name?.trim() || '新規プロジェクト',
     client: input.client?.trim() || '',
     note: input.note?.trim() || '',
     launchDate: input.launchDate || '',
-    customDepartments: input.customDepartments || [],
+    departments,
     phases: { ...emptyPhases(departments), ...(input.phases || {}) },
     todos: input.todos || [],
     completedAt: null,
@@ -28,17 +31,22 @@ export function createProject(input = {}, departments = []) {
   };
 }
 
-/** 保存データを現在のスキーマに合わせて補正する（古いデータ・壊れたデータ対策） */
-export function normalizeProject(raw, departments = []) {
-  // このプロジェクトだけで使う工程
-  const customDepartments = normalizeDepartments(raw?.customDepartments, false);
+/**
+ * 保存データを現在のスキーマに合わせて補正する。
+ * 旧データ（工程が全プロジェクト共通だった頃）は、共通工程 + そのプロジェクト固有工程を
+ * まとめてこのプロジェクトの工程として引き継ぐ。
+ */
+export function normalizeProject(raw, fallbackDepartments = DEFAULT_DEPARTMENTS) {
+  const departments =
+    Array.isArray(raw?.departments) && raw.departments.length > 0
+      ? normalizeDepartments(raw.departments)
+      : normalizeDepartments([
+          ...fallbackDepartments,
+          ...normalizeDepartments(raw?.customDepartments, false),
+        ]);
   const phases = {};
   // 工程定義にあるものと、保存済みデータに残っているものの両方を残す
-  const phaseIds = new Set([
-    ...departments.map((d) => d.id),
-    ...customDepartments.map((d) => d.id),
-    ...Object.keys(raw?.phases || {}),
-  ]);
+  const phaseIds = new Set([...departments.map((d) => d.id), ...Object.keys(raw?.phases || {})]);
   for (const id of phaseIds) {
     const p = raw?.phases?.[id] || {};
     phases[id] = {
@@ -54,7 +62,7 @@ export function normalizeProject(raw, departments = []) {
     client: raw?.client || '',
     note: raw?.note || '',
     launchDate: typeof raw?.launchDate === 'string' ? raw.launchDate : '',
-    customDepartments,
+    departments,
     phases,
     todos: Array.isArray(raw?.todos)
       ? raw.todos.map((t) => ({
@@ -78,9 +86,9 @@ export function clampProgress(value) {
   return Math.min(100, Math.max(0, Math.round(n)));
 }
 
-/** 共通工程 + このプロジェクトだけの工程 */
-export function departmentsFor(project, departments = []) {
-  return [...departments, ...(project?.customDepartments || [])];
+/** このプロジェクトの工程一覧 */
+export function departmentsOf(project) {
+  return project?.departments || [];
 }
 
 export function phaseOf(project, deptId) {
@@ -111,14 +119,14 @@ export function phaseProgress(project, deptId) {
 }
 
 /** 日付が入っている工程だけを返す */
-export function scheduledPhases(project, departments) {
-  return departmentsFor(project, departments)
+export function scheduledPhases(project) {
+  return departmentsOf(project)
     .map((dept) => ({ dept, phase: phaseOf(project, dept.id) }))
     .filter(({ phase }) => phase.start && phase.end);
 }
 
 /** プロジェクト全体の期間（立ち上げ日も含む。日付が1つも無ければ null） */
-export function projectRange(project, departments) {
+export function projectRange(project) {
   let start = null;
   let end = null;
   const extend = (d) => {
@@ -126,7 +134,7 @@ export function projectRange(project, departments) {
     if (!start || d < start) start = d;
     if (!end || d > end) end = d;
   };
-  for (const { phase } of scheduledPhases(project, departments)) {
+  for (const { phase } of scheduledPhases(project)) {
     extend(parseDate(phase.start));
     extend(parseDate(phase.end));
   }
@@ -136,8 +144,8 @@ export function projectRange(project, departments) {
 }
 
 /** 工程の日数で重み付けした全体進捗（%） */
-export function projectProgress(project, departments) {
-  const scheduled = scheduledPhases(project, departments);
+export function projectProgress(project) {
+  const scheduled = scheduledPhases(project);
   if (scheduled.length === 0) {
     // 工程に日付が無い場合は TODO の完了率をそのまま全体進捗とする
     const { total, done } = todoStats(project);

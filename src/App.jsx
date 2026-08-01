@@ -2,14 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ZOOM_LEVELS } from './constants.js';
 import { useBoard } from './hooks/useBoard.js';
 import { addDays, today, toISO } from './lib/date.js';
+import { departmentsOf } from './lib/project.js';
 import GanttChart from './components/GanttChart.jsx';
 import ProjectDrawer from './components/ProjectDrawer.jsx';
 import CompletedPage from './components/CompletedPage.jsx';
-import DeptSettingsModal from './components/DeptSettingsModal.jsx';
 
 export default function App() {
   const {
-    departments,
     activeProjects,
     completedProjects,
     addProject,
@@ -27,10 +26,6 @@ export default function App() {
     updateDepartment,
     moveDepartment,
     removeDepartment,
-    addProjectDepartment,
-    updateProjectDepartment,
-    moveProjectDepartment,
-    removeProjectDepartment,
   } = useBoard();
 
   const [page, setPage] = useState('active');
@@ -39,7 +34,6 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null);
   const [newProjectId, setNewProjectId] = useState(null);
   const [focusTodaySignal, setFocusTodaySignal] = useState(0);
-  const [deptSettingsOpen, setDeptSettingsOpen] = useState(false);
 
   const selected = useMemo(
     () => activeProjects.find((p) => p.id === selectedId) || null,
@@ -51,25 +45,42 @@ export default function App() {
     if (selectedId && !selected) setSelectedId(null);
   }, [selectedId, selected]);
 
-  // 削除された工程で絞り込んだままにならないようにする
+  // 工程はプロジェクトごとに持つので、強調フィルタは全プロジェクトの工程名をまとめて作る
+  // （同じ名前の工程は、プロジェクトが違っても1つのボタンにまとめる）
+  const filterDepartments = useMemo(() => {
+    const map = new Map();
+    for (const project of activeProjects) {
+      for (const dept of departmentsOf(project)) {
+        if (!map.has(dept.label)) map.set(dept.label, dept);
+      }
+    }
+    return [...map.values()];
+  }, [activeProjects]);
+
+  // 無くなった工程名で絞り込んだままにならないようにする
   useEffect(() => {
-    if (deptFilter && !departments.some((d) => d.id === deptFilter)) setDeptFilter('');
-  }, [deptFilter, departments]);
+    if (deptFilter && !filterDepartments.some((d) => d.label === deptFilter)) setDeptFilter('');
+  }, [deptFilter, filterDepartments]);
 
   const handleAdd = useCallback(() => {
     const base = today();
-    const first = departments[0];
     // 追加直後でもガントに現れるよう、先頭工程に今日から2週間を仮置きする
-    const id = addProject({
-      name: '新規プロジェクト',
-      phases: first
-        ? { [first.id]: { owner: '', start: toISO(base), end: toISO(addDays(base, 13)), progress: 0 } }
-        : {},
-    });
+    const id = addProject({ name: '新規プロジェクト' });
     setPage('active');
     setSelectedId(id);
     setNewProjectId(id);
-  }, [addProject, departments]);
+    // createProject 内で既定の工程が作られるので、その先頭に仮の期間を入れる
+    updateProject(id, (p) => {
+      const first = departmentsOf(p)[0];
+      if (!first) return {};
+      return {
+        phases: {
+          ...p.phases,
+          [first.id]: { ...p.phases[first.id], start: toISO(base), end: toISO(addDays(base, 13)) },
+        },
+      };
+    });
+  }, [addProject, updateProject]);
 
   const handleComplete = useCallback(
     (id) => {
@@ -158,22 +169,19 @@ export default function App() {
               >
                 すべて
               </button>
-              {departments.map((dept) => (
+              {filterDepartments.map((dept) => (
                 <button
                   type="button"
-                  key={dept.id}
-                  className={deptFilter === dept.id ? 'is-active' : ''}
+                  key={dept.label}
+                  className={deptFilter === dept.label ? 'is-active' : ''}
                   style={{ '--dept-color': dept.color }}
-                  onClick={() => setDeptFilter(deptFilter === dept.id ? '' : dept.id)}
+                  onClick={() => setDeptFilter(deptFilter === dept.label ? '' : dept.label)}
                 >
                   <span className="swatch" style={{ background: dept.color }} />
                   {dept.label}
                 </button>
               ))}
             </div>
-            <button type="button" className="btn btn--ghost" onClick={() => setDeptSettingsOpen(true)}>
-              工程を編集
-            </button>
           </div>
 
           <div className="toolbar__group toolbar__group--right">
@@ -191,7 +199,6 @@ export default function App() {
         {page === 'active' ? (
           <GanttChart
             projects={activeProjects}
-            departments={departments}
             zoom={zoom}
             selectedId={selectedId}
             deptFilter={deptFilter}
@@ -209,7 +216,6 @@ export default function App() {
         ) : (
           <CompletedPage
             projects={completedProjects}
-            departments={departments}
             onRestore={restoreProject}
             onDelete={removeProject}
           />
@@ -219,7 +225,6 @@ export default function App() {
       {selected && (
         <ProjectDrawer
           project={selected}
-          departments={departments}
           isNew={selected.id === newProjectId}
           onClose={() => setSelectedId(null)}
           onUpdate={updateProject}
@@ -228,23 +233,10 @@ export default function App() {
           onAddTodo={addTodo}
           onToggleTodo={toggleTodo}
           onRemoveTodo={removeTodo}
-          onOpenDeptSettings={() => setDeptSettingsOpen(true)}
-        />
-      )}
-
-      {deptSettingsOpen && (
-        <DeptSettingsModal
-          departments={departments}
-          project={selected}
-          onAdd={addDepartment}
-          onUpdate={updateDepartment}
-          onMove={moveDepartment}
-          onRemove={removeDepartment}
-          onAddProjectDept={addProjectDepartment}
-          onUpdateProjectDept={updateProjectDepartment}
-          onMoveProjectDept={moveProjectDepartment}
-          onRemoveProjectDept={removeProjectDepartment}
-          onClose={() => setDeptSettingsOpen(false)}
+          onAddDept={addDepartment}
+          onUpdateDept={updateDepartment}
+          onMoveDept={moveDepartment}
+          onRemoveDept={removeDepartment}
         />
       )}
     </div>

@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import { formatJP, toISO } from '../lib/date.js';
-import { departmentsFor, phaseOf, projectRange, todoStats } from '../lib/project.js';
+import { departmentsOf, phaseOf, projectRange, todoStats } from '../lib/project.js';
 import DeptChip from './DeptChip.jsx';
 import TodoList from './TodoList.jsx';
 
 /** 完了プロジェクト一覧（別ページ） */
-export default function CompletedPage({ projects, departments, onRestore, onDelete }) {
+export default function CompletedPage({ projects, onRestore, onDelete }) {
   const [keyword, setKeyword] = useState('');
   const [openId, setOpenId] = useState(null);
 
@@ -13,10 +13,12 @@ export default function CompletedPage({ projects, departments, onRestore, onDele
     const q = keyword.trim().toLowerCase();
     if (!q) return projects;
     return projects.filter((p) => {
-      const owners = departments.map((d) => phaseOf(p, d.id).owner).join(' ');
+      const owners = departmentsOf(p)
+        .map((d) => phaseOf(p, d.id).owner)
+        .join(' ');
       return `${p.name} ${p.client} ${owners}`.toLowerCase().includes(q);
     });
-  }, [projects, departments, keyword]);
+  }, [projects, keyword]);
 
   return (
     <div className="completed">
@@ -41,8 +43,8 @@ export default function CompletedPage({ projects, departments, onRestore, onDele
 
       <ul className="completed__list">
         {filtered.map((project) => {
-          const range = projectRange(project, departments);
-          const allDepts = departmentsFor(project, departments);
+          const range = projectRange(project);
+          const allDepts = departmentsOf(project);
           const todo = todoStats(project);
           const open = openId === project.id;
           return (

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { LANE_GAP, LANE_HEIGHT, ROW_PADDING } from '../constants.js';
 import { buildTimeline } from '../lib/timeline.js';
-import { departmentsFor } from '../lib/project.js';
+import { departmentsOf } from '../lib/project.js';
 import GanttRow from './GanttRow.jsx';
 import TodoHoverCard from './TodoHoverCard.jsx';
 
@@ -10,7 +10,6 @@ const LEFT_WIDTH = 360;
 /** 進行中プロジェクトを横一列（1行1プロジェクト）で並べるガントチャート */
 export default function GanttChart({
   projects,
-  departments,
   zoom,
   selectedId,
   deptFilter,
@@ -27,16 +26,10 @@ export default function GanttChart({
   const [dropIndex, setDropIndex] = useState(null);
   const [hover, setHover] = useState(null);
 
-  const timeline = useMemo(
-    () => buildTimeline(projects, zoom, departments),
-    [projects, zoom, departments]
-  );
+  const timeline = useMemo(() => buildTimeline(projects, zoom), [projects, zoom]);
 
-  // プロジェクト専用の工程を持つ行に合わせて、全行のレーン数と高さを揃える
-  const laneCount = projects.reduce(
-    (max, p) => Math.max(max, departmentsFor(p, departments).length),
-    departments.length
-  );
+  // 工程数はプロジェクトごとに違うので、一番多い行に合わせて全行の高さを揃える
+  const laneCount = projects.reduce((max, p) => Math.max(max, departmentsOf(p).length), 1);
   const rowHeight = ROW_PADDING + laneCount * (LANE_HEIGHT + LANE_GAP);
 
   // 「今日」が画面の左から1/3くらいに来るようにスクロールする
@@ -123,7 +116,6 @@ export default function GanttChart({
                 project={project}
                 index={index}
                 total={projects.length}
-                departments={departments}
                 laneCount={laneCount}
                 timeline={timeline}
                 rowHeight={rowHeight}

@@ -3,8 +3,8 @@ import { addDays, today, toISO } from './date.js';
 import { createId, normalizeProject } from './project.js';
 
 // 初回起動時に表示するサンプル。今日を基準に日付を作るので、いつ開いても見た目が崩れない。
-export function sampleBoard() {
-  const departments = DEFAULT_DEPARTMENTS.map((d) => ({ ...d }));
+export function sampleProjects() {
+  const departments = () => DEFAULT_DEPARTMENTS.map((d) => ({ ...d }));
   const base = today();
   const d = (offset) => toISO(addDays(base, offset));
   const todo = (text, done = false, dept = '', start = '', end = '') => ({
@@ -16,17 +16,20 @@ export function sampleBoard() {
     end,
   });
 
-  const projects = [
+  return [
     {
       name: '自動検査装置 A ライン',
       client: '株式会社サンプル製作所',
       note: '最優先案件。立ち上げ日は客先の稼働開始に合わせて調整済み。',
+      // 工程はプロジェクトごとなので、この案件にだけ「修正対応」を足してある
+      departments: [...DEFAULT_DEPARTMENTS, { id: 'fix_sample', label: '修正対応', color: '#db2777' }],
       launchDate: d(52),
       phases: {
         sales: { owner: '山田', start: d(-30), end: d(-5), progress: 100 },
         mecha: { owner: '佐藤', start: d(-10), end: d(25), progress: 60 },
         elec: { owner: '鈴木', start: d(5), end: d(40), progress: 20 },
         cs: { owner: '田中', start: d(38), end: d(55), progress: 0 },
+        fix_sample: { owner: '小林', start: d(45), end: d(58), progress: 0 },
       },
       todos: [
         todo('客先仕様の最終確認', true, 'sales', d(-30), d(-20)),
@@ -83,7 +86,5 @@ export function sampleBoard() {
       ],
       completedAt: d(-38),
     },
-  ].map((p) => normalizeProject({ ...p, id: createId() }, departments));
-
-  return { departments, projects };
+  ].map((p) => normalizeProject({ ...p, id: createId(), departments: p.departments ?? departments() }));
 }

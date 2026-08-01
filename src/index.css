@@ -901,14 +901,53 @@ textarea {
 .phase__head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
-.phase__label {
-  flex: 0 0 46px;
-  font-size: 12px;
+.phase__color {
+  flex: 0 0 26px;
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+
+.phase__name {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 3px 6px;
+  background: transparent;
   font-weight: 700;
-  color: color-mix(in srgb, var(--dept-color) 75%, black);
+  color: color-mix(in srgb, var(--dept-color) 78%, black);
+}
+
+.phase__name:hover {
+  border-color: var(--line-strong);
+  background: var(--surface);
+}
+
+.phase__tools {
+  display: flex;
+  gap: 1px;
+  flex: 0 0 auto;
+}
+
+.phase__owner-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.phase__sublabel {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .phase__owner {
@@ -1400,119 +1439,6 @@ textarea {
   font-weight: 700;
 }
 
-/* ---------- 工程の設定モーダル ---------- */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.35);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  z-index: 50;
-}
-
-.modal {
-  width: min(560px, 100%);
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--surface);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-md);
-}
-
-.modal__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--line);
-}
-
-.modal__head h3 {
-  font-size: 16px;
-}
-
-.modal__head .muted {
-  margin: 4px 0 0;
-  font-size: 12px;
-}
-
-.modal__body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 14px 16px;
-}
-
-.modal__foot {
-  display: flex;
-  justify-content: flex-end;
-  padding: 12px 16px;
-  border-top: 1px solid var(--line);
-  background: var(--surface-2);
-}
-
-.deptlist {
-  list-style: none;
-  margin: 0 0 14px;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.deptlist__item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--dept-color);
-  border-radius: 8px;
-  background: var(--surface-2);
-}
-
-.deptlist__color {
-  flex: 0 0 34px;
-  width: 34px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid var(--line-strong);
-  border-radius: 6px;
-  background: none;
-  cursor: pointer;
-}
-
-.deptlist__label {
-  flex: 1;
-  min-width: 0;
-  border: 1px solid var(--line-strong);
-  border-radius: 6px;
-  padding: 5px 8px;
-  background: var(--surface);
-}
-
-.deptlist__actions {
-  display: flex;
-  gap: 2px;
-}
-
-.deptadd {
-  display: flex;
-  gap: 8px;
-}
-
-.deptadd input {
-  flex: 1;
-  min-width: 0;
-  border: 1px solid var(--line-strong);
-  border-radius: 8px;
-  padding: 7px 10px;
-}
-
 /* ---------- 追加の小物 ---------- */
 .section-head__right {
   display: flex;
@@ -1587,56 +1513,6 @@ textarea {
   border-color: color-mix(in srgb, var(--dept-color) 35%, white);
 }
 
-/* ---------- 工程の設定（セクション分け） ---------- */
-.deptsection {
-  margin-bottom: 20px;
-}
-
-.deptsection h4 {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-size: 13px;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--line);
-}
-
-.deptsection__target {
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.deptsection__hint {
-  margin: 0;
-}
-
-.deptsection .muted {
-  margin: 0 0 8px;
-}
-
-/* プロジェクト専用工程の目印 */
-.phase__own {
-  margin-left: 4px;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--dept-color) 16%, white);
-  border: 1px solid color-mix(in srgb, var(--dept-color) 40%, white);
-  font-size: 9px;
-  font-weight: 700;
-}
-
-.phase__label {
-  display: flex;
-  align-items: center;
-  flex: 0 0 auto;
-  max-width: 120px;
-}
-
 /* ホバーカードの工程名 */
 .hovercard__head .hovercard__title {
   display: flex;
@@ -1656,4 +1532,31 @@ textarea {
 
 .bar.has-todo:hover {
   filter: brightness(0.94);
+}
+
+/* 工程の追加フォーム（詳細パネル内） */
+.phaseadd {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-strong);
+}
+
+.phaseadd input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+
+.phaseadd .btn {
+  white-space: nowrap;
+}
+
+.section-note {
+  margin: -4px 0 10px;
+  font-size: 11px;
+  color: var(--text-muted);
 }

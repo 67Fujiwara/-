@@ -1,6 +1,6 @@
 import { formatJP, toISO } from '../lib/date.js';
 import {
-  departmentsFor,
+  departmentsOf,
   phaseOf,
   phaseProgress,
   projectProgress,
@@ -15,7 +15,6 @@ export default function GanttRow({
   project,
   index,
   total,
-  departments,
   laneCount,
   timeline,
   rowHeight,
@@ -34,9 +33,9 @@ export default function GanttRow({
   onDragEnd,
   onDrop,
 }) {
-  const allDepts = departmentsFor(project, departments);
-  const range = projectRange(project, departments);
-  const progress = projectProgress(project, departments);
+  const allDepts = departmentsOf(project);
+  const range = projectRange(project);
+  const progress = projectProgress(project);
   const todo = todoStats(project);
   const band = range ? timeline.barFor(toISO(range.start), toISO(range.end)) : null;
   const launchX = project.launchDate ? timeline.xForISO(project.launchDate) : null;
@@ -128,7 +127,7 @@ export default function GanttRow({
               key={dept.id}
               dept={dept}
               owner={phaseOf(project, dept.id).owner}
-              dimmed={Boolean(deptFilter) && deptFilter !== dept.id}
+              dimmed={Boolean(deptFilter) && deptFilter !== dept.label}
             />
           ))}
         </div>
@@ -157,7 +156,7 @@ export default function GanttRow({
           {allDepts.map((dept) => {
             const phase = phaseOf(project, dept.id);
             const bar = phase.start && phase.end ? timeline.barFor(phase.start, phase.end) : null;
-            const dimmed = Boolean(deptFilter) && deptFilter !== dept.id;
+            const dimmed = Boolean(deptFilter) && deptFilter !== dept.label;
             const prog = phaseProgress(project, dept.id);
             const deptTodos = todosOfDept(project, dept.id);
             return (

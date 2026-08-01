@@ -1,17 +1,10 @@
-import { useEffect, useRef } from 'react';
-import {
-  clampProgress,
-  departmentsFor,
-  phaseOf,
-  phaseProgress,
-  projectProgress,
-} from '../lib/project.js';
+import { useEffect, useRef, useState } from 'react';
+import { clampProgress, departmentsOf, phaseOf, phaseProgress, projectProgress } from '../lib/project.js';
 import TodoList from './TodoList.jsx';
 
 /** 選択中プロジェクトの詳細（担当・工程・TODO）を編集するサイドパネル */
 export default function ProjectDrawer({
   project,
-  departments,
   isNew,
   onClose,
   onUpdate,
@@ -20,9 +13,13 @@ export default function ProjectDrawer({
   onAddTodo,
   onToggleTodo,
   onRemoveTodo,
-  onOpenDeptSettings,
+  onAddDept,
+  onUpdateDept,
+  onMoveDept,
+  onRemoveDept,
 }) {
   const nameRef = useRef(null);
+  const [newDeptLabel, setNewDeptLabel] = useState('');
 
   useEffect(() => {
     if (isNew && nameRef.current) {
@@ -41,15 +38,20 @@ export default function ProjectDrawer({
 
   if (!project) return null;
 
+  const departments = departmentsOf(project);
+  const progress = projectProgress(project);
+
   const setPhase = (deptId, patch) => {
     onUpdate(project.id, (p) => ({
       phases: { ...p.phases, [deptId]: { ...phaseOf(p, deptId), ...patch } },
     }));
   };
 
-  const progress = projectProgress(project, departments);
-  const allDepts = departmentsFor(project, departments);
-  const customIds = new Set((project.customDepartments || []).map((d) => d.id));
+  const submitDept = (event) => {
+    event.preventDefault();
+    onAddDept(project.id, newDeptLabel.trim() || '新しい工程');
+    setNewDeptLabel('');
+  };
 
   return (
     <aside className="drawer" role="dialog" aria-label="プロジェクト詳細">
@@ -105,29 +107,73 @@ export default function ProjectDrawer({
         <section>
           <div className="section-head">
             <h4>担当と工程</h4>
-            <div className="section-head__right">
-              <span className="badge">全体進捗 {progress}%</span>
-              <button type="button" className="btn btn--ghost btn--sm" onClick={onOpenDeptSettings}>
-                工程を編集
-              </button>
-            </div>
+            <span className="badge">全体進捗 {progress}%</span>
           </div>
+          <p className="section-note">
+            工程はこのプロジェクトだけのものです。追加・削除しても他のプロジェクトには影響しません。
+          </p>
 
-          {allDepts.map((dept) => {
+          {departments.map((dept, index) => {
             const phase = phaseOf(project, dept.id);
             const prog = phaseProgress(project, dept.id);
             const invalid = phase.start && phase.end && phase.end < phase.start;
             return (
               <div className="phase" key={dept.id} style={{ '--dept-color': dept.color }}>
                 <div className="phase__head">
-                  <span className="phase__label">
-                    {dept.label}
-                    {customIds.has(dept.id) && (
-                      <span className="phase__own" title="このプロジェクトだけの工程">
-                        専用
-                      </span>
-                    )}
+                  <input
+                    type="color"
+                    className="phase__color"
+                    value={dept.color}
+                    title="色を変更"
+                    onChange={(e) => onUpdateDept(project.id, dept.id, { color: e.target.value })}
+                  />
+                  <input
+                    type="text"
+                    className="phase__name"
+                    value={dept.label}
+                    title="工程名"
+                    onChange={(e) => onUpdateDept(project.id, dept.id, { label: e.target.value })}
+                  />
+                  <span className="phase__tools">
+                    <button
+                      type="button"
+                      className="iconbtn"
+                      title="1つ上へ"
+                      disabled={index === 0}
+                      onClick={() => onMoveDept(project.id, dept.id, -1)}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="iconbtn"
+                      title="1つ下へ"
+                      disabled={index === departments.length - 1}
+                      onClick={() => onMoveDept(project.id, dept.id, 1)}
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      className="iconbtn iconbtn--danger"
+                      title="この工程を削除"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `「${project.name}」から工程「${dept.label}」を削除します。\n担当者・期間も削除され、この工程の TODO は「工程なし」になります。\n（他のプロジェクトには影響しません）`
+                          )
+                        ) {
+                          onRemoveDept(project.id, dept.id);
+                        }
+                      }}
+                    >
+                      ×
+                    </button>
                   </span>
+                </div>
+
+                <div className="phase__owner-row">
+                  <span className="phase__sublabel">担当</span>
                   <input
                     type="text"
                     className="phase__owner"
@@ -136,6 +182,7 @@ export default function ProjectDrawer({
                     onChange={(e) => setPhase(dept.id, { owner: e.target.value })}
                   />
                 </div>
+
                 <div className="phase__dates">
                   <input
                     type="date"
@@ -150,6 +197,7 @@ export default function ProjectDrawer({
                   />
                 </div>
                 {invalid && <p className="warn">終了日が開始日より前です。日付を確認してください。</p>}
+
                 <div className="phase__progress">
                   <input
                     type="range"
@@ -170,12 +218,28 @@ export default function ProjectDrawer({
               </div>
             );
           })}
+
+          {departments.length === 0 && (
+            <p className="muted">工程がありません。下の入力欄から追加してください。</p>
+          )}
+
+          <form className="phaseadd" onSubmit={submitDept}>
+            <input
+              type="text"
+              value={newDeptLabel}
+              placeholder="工程名（例：修正対応、据付、試運転）"
+              onChange={(e) => setNewDeptLabel(e.target.value)}
+            />
+            <button type="submit" className="btn btn--primary">
+              ＋ 工程を追加
+            </button>
+          </form>
         </section>
 
         <section>
           <TodoList
             project={project}
-            departments={allDepts}
+            departments={departments}
             onAdd={onAddTodo}
             onToggle={onToggleTodo}
             onRemove={onRemoveTodo}

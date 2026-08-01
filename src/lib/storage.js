@@ -1,42 +1,42 @@
-import { SCHEMA_VERSION, STORAGE_KEY } from '../constants.js';
+import { DEFAULT_DEPARTMENTS, SCHEMA_VERSION, STORAGE_KEY } from '../constants.js';
 import { normalizeDepartments } from './departments.js';
 import { normalizeProject } from './project.js';
-import { sampleBoard } from './sampleData.js';
+import { sampleProjects } from './sampleData.js';
 
 /**
- * 保存データを読み込む。
- * v1（プロジェクトの配列のみ）で保存されたデータは、初期の4工程を補って読み込む。
+ * 保存データを読み込む。工程はプロジェクトごとに持つ形式（v3）。
+ * 旧形式も読み込める。
+ *   v1: プロジェクトの配列だけ            → 既定の工程を各プロジェクトに複製
+ *   v2: { departments, projects }        → 共通工程 + 専用工程を各プロジェクトの工程として統合
  */
-export function loadBoard() {
+export function loadProjects() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return sampleBoard();
+    if (!raw) return sampleProjects();
     const parsed = JSON.parse(raw);
 
-    // v1: プロジェクトの配列がそのまま入っている
     if (Array.isArray(parsed)) {
-      const departments = normalizeDepartments(null);
-      return { departments, projects: parsed.map((p) => normalizeProject(p, departments)) };
+      return parsed.map((p) => normalizeProject(p, DEFAULT_DEPARTMENTS));
     }
 
     if (parsed && Array.isArray(parsed.projects)) {
-      const departments = normalizeDepartments(parsed.departments);
-      return { departments, projects: parsed.projects.map((p) => normalizeProject(p, departments)) };
+      // v2 の共通工程は、各プロジェクトの工程の土台として引き継ぐ
+      const shared = parsed.departments
+        ? normalizeDepartments(parsed.departments)
+        : DEFAULT_DEPARTMENTS;
+      return parsed.projects.map((p) => normalizeProject(p, shared));
     }
 
-    return sampleBoard();
+    return sampleProjects();
   } catch (err) {
     console.warn('保存データを読み込めませんでした。初期データを表示します。', err);
-    return sampleBoard();
+    return sampleProjects();
   }
 }
 
-export function saveBoard(board) {
+export function saveProjects(projects) {
   try {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ version: SCHEMA_VERSION, departments: board.departments, projects: board.projects })
-    );
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: SCHEMA_VERSION, projects }));
     return true;
   } catch (err) {
     console.warn('保存に失敗しました。', err);

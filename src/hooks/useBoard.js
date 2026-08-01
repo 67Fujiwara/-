@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { loadBoard, saveBoard } from '../lib/storage.js';
+import { loadProjects, saveProjects } from '../lib/storage.js';
 import { createDepartment } from '../lib/departments.js';
-import { createId, createProject, emptyPhase } from '../lib/project.js';
+import { createId, createProject, departmentsOf, emptyPhase } from '../lib/project.js';
 import { todayISO } from '../lib/date.js';
 
 /** 進行中プロジェクトだけを並べ替える（完了プロジェクトの位置は動かさない） */
@@ -29,19 +29,11 @@ function reorderActive(list, fromIndex, toIndex) {
 }
 
 export function useBoard() {
-  const [board, setBoard] = useState(loadBoard);
-  const { departments, projects } = board;
+  const [projects, setProjects] = useState(loadProjects);
 
   useEffect(() => {
-    saveBoard(board);
-  }, [board]);
-
-  const setProjects = useCallback((updater) => {
-    setBoard((prev) => ({
-      ...prev,
-      projects: typeof updater === 'function' ? updater(prev.projects) : updater,
-    }));
-  }, []);
+    saveProjects(projects);
+  }, [projects]);
 
   const activeProjects = useMemo(() => projects.filter((p) => !p.completedAt), [projects]);
   const completedProjects = useMemo(
@@ -55,80 +47,59 @@ export function useBoard() {
 
   /* ---------- プロジェクト ---------- */
 
-  const addProject = useCallback(
-    (input) => {
-      const project = createProject(input, departments);
-      // 新規プロジェクトは必ず最下行に追加する
-      setProjects((prev) => [...prev, project]);
-      return project.id;
-    },
-    [departments, setProjects]
-  );
+  const addProject = useCallback((input) => {
+    const project = createProject(input);
+    // 新規プロジェクトは必ず最下行に追加する
+    setProjects((prev) => [...prev, project]);
+    return project.id;
+  }, []);
 
-  const updateProject = useCallback(
-    (id, patch) => {
-      setProjects((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, ...(typeof patch === 'function' ? patch(p) : patch) } : p))
-      );
-    },
-    [setProjects]
-  );
+  const updateProject = useCallback((id, patch) => {
+    setProjects((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, ...(typeof patch === 'function' ? patch(p) : patch) } : p))
+    );
+  }, []);
 
-  const removeProject = useCallback(
-    (id) => setProjects((prev) => prev.filter((p) => p.id !== id)),
-    [setProjects]
-  );
+  const removeProject = useCallback((id) => setProjects((prev) => prev.filter((p) => p.id !== id)), []);
 
   const completeProject = useCallback(
     (id) => setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, completedAt: todayISO() } : p))),
-    [setProjects]
+    []
   );
 
-  const restoreProject = useCallback(
-    (id) => {
-      // 復帰したプロジェクトは進行中の最下行に戻す
-      setProjects((prev) => {
-        const target = prev.find((p) => p.id === id);
-        if (!target) return prev;
-        return [...prev.filter((p) => p.id !== id), { ...target, completedAt: null }];
-      });
-    },
-    [setProjects]
-  );
+  const restoreProject = useCallback((id) => {
+    // 復帰したプロジェクトは進行中の最下行に戻す
+    setProjects((prev) => {
+      const target = prev.find((p) => p.id === id);
+      if (!target) return prev;
+      return [...prev.filter((p) => p.id !== id), { ...target, completedAt: null }];
+    });
+  }, []);
 
-  const moveProject = useCallback(
-    (id, delta) => {
-      setProjects((prev) => {
-        const from = prev.filter((p) => !p.completedAt).findIndex((p) => p.id === id);
-        if (from < 0) return prev;
-        return reorderActive(prev, from, from + delta);
-      });
-    },
-    [setProjects]
-  );
+  const moveProject = useCallback((id, delta) => {
+    setProjects((prev) => {
+      const from = prev.filter((p) => !p.completedAt).findIndex((p) => p.id === id);
+      if (from < 0) return prev;
+      return reorderActive(prev, from, from + delta);
+    });
+  }, []);
 
-  const moveProjectToTop = useCallback(
-    (id) => {
-      setProjects((prev) => {
-        const from = prev.filter((p) => !p.completedAt).findIndex((p) => p.id === id);
-        if (from < 0) return prev;
-        return reorderActive(prev, from, 0);
-      });
-    },
-    [setProjects]
-  );
+  const moveProjectToTop = useCallback((id) => {
+    setProjects((prev) => {
+      const from = prev.filter((p) => !p.completedAt).findIndex((p) => p.id === id);
+      if (from < 0) return prev;
+      return reorderActive(prev, from, 0);
+    });
+  }, []);
 
   /** ドラッグ&ドロップ用: 進行中リスト内のインデックス指定で並べ替える */
-  const moveProjectToIndex = useCallback(
-    (id, toIndex) => {
-      setProjects((prev) => {
-        const from = prev.filter((p) => !p.completedAt).findIndex((p) => p.id === id);
-        if (from < 0) return prev;
-        return reorderActive(prev, from, toIndex);
-      });
-    },
-    [setProjects]
-  );
+  const moveProjectToIndex = useCallback((id, toIndex) => {
+    setProjects((prev) => {
+      const from = prev.filter((p) => !p.completedAt).findIndex((p) => p.id === id);
+      if (from < 0) return prev;
+      return reorderActive(prev, from, toIndex);
+    });
+  }, []);
 
   /* ---------- TODO ---------- */
 
@@ -159,105 +130,53 @@ export function useBoard() {
     [updateProject]
   );
 
-  /* ---------- 工程（担当区分） ---------- */
+  /* ---------- 工程（担当区分）: すべてプロジェクト単位 ---------- */
 
-  const addDepartment = useCallback((label) => {
-    setBoard((prev) => {
-      const dept = createDepartment(prev.departments, label);
-      return {
-        departments: [...prev.departments, dept],
-        projects: prev.projects.map((p) => ({
-          ...p,
-          phases: { ...p.phases, [dept.id]: emptyPhase() },
-        })),
-      };
-    });
-  }, []);
-
-  const updateDepartment = useCallback((id, patch) => {
-    setBoard((prev) => ({
-      ...prev,
-      departments: prev.departments.map((d) => (d.id === id ? { ...d, ...patch } : d)),
-    }));
-  }, []);
-
-  const moveDepartment = useCallback((id, delta) => {
-    setBoard((prev) => {
-      const list = prev.departments.slice();
-      const from = list.findIndex((d) => d.id === id);
-      const to = from + delta;
-      if (from < 0 || to < 0 || to >= list.length) return prev;
-      const [moved] = list.splice(from, 1);
-      list.splice(to, 0, moved);
-      return { ...prev, departments: list };
-    });
-  }, []);
-
-  /** 工程を削除する。各プロジェクトの担当・期間・TODOの紐づけも一緒に外す。 */
-  const removeDepartment = useCallback((id) => {
-    setBoard((prev) => {
-      if (prev.departments.length <= 1) return prev;
-      return {
-        departments: prev.departments.filter((d) => d.id !== id),
-        projects: prev.projects.map((p) => {
-          const phases = { ...p.phases };
-          delete phases[id];
-          return {
-            ...p,
-            phases,
-            todos: p.todos.map((t) => (t.dept === id ? { ...t, dept: '' } : t)),
-          };
-        }),
-      };
-    });
-  }, []);
-
-  /* ---------- プロジェクト専用の工程 ---------- */
-
-  const addProjectDepartment = useCallback(
+  const addDepartment = useCallback(
     (projectId, label) => {
       updateProject(projectId, (p) => {
-        const dept = createDepartment([...departments, ...p.customDepartments], label);
+        const dept = createDepartment(departmentsOf(p), label);
         return {
-          customDepartments: [...p.customDepartments, dept],
+          departments: [...departmentsOf(p), dept],
           phases: { ...p.phases, [dept.id]: emptyPhase() },
         };
       });
     },
-    [departments, updateProject]
+    [updateProject]
   );
 
-  const updateProjectDepartment = useCallback(
+  const updateDepartment = useCallback(
     (projectId, deptId, patch) => {
       updateProject(projectId, (p) => ({
-        customDepartments: p.customDepartments.map((d) => (d.id === deptId ? { ...d, ...patch } : d)),
+        departments: departmentsOf(p).map((d) => (d.id === deptId ? { ...d, ...patch } : d)),
       }));
     },
     [updateProject]
   );
 
-  const moveProjectDepartment = useCallback(
+  const moveDepartment = useCallback(
     (projectId, deptId, delta) => {
       updateProject(projectId, (p) => {
-        const list = p.customDepartments.slice();
+        const list = departmentsOf(p).slice();
         const from = list.findIndex((d) => d.id === deptId);
         const to = from + delta;
         if (from < 0 || to < 0 || to >= list.length) return {};
         const [moved] = list.splice(from, 1);
         list.splice(to, 0, moved);
-        return { customDepartments: list };
+        return { departments: list };
       });
     },
     [updateProject]
   );
 
-  const removeProjectDepartment = useCallback(
+  /** 工程を削除する。担当者・期間も消え、その工程の TODO は「工程なし」に戻る。 */
+  const removeDepartment = useCallback(
     (projectId, deptId) => {
       updateProject(projectId, (p) => {
         const phases = { ...p.phases };
         delete phases[deptId];
         return {
-          customDepartments: p.customDepartments.filter((d) => d.id !== deptId),
+          departments: departmentsOf(p).filter((d) => d.id !== deptId),
           phases,
           todos: p.todos.map((t) => (t.dept === deptId ? { ...t, dept: '' } : t)),
         };
@@ -267,7 +186,6 @@ export function useBoard() {
   );
 
   return {
-    departments,
     projects,
     activeProjects,
     completedProjects,
@@ -286,9 +204,5 @@ export function useBoard() {
     updateDepartment,
     moveDepartment,
     removeDepartment,
-    addProjectDepartment,
-    updateProjectDepartment,
-    moveProjectDepartment,
-    removeProjectDepartment,
   };
 }
