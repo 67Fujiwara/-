@@ -1,12 +1,11 @@
 import { useMemo, useState } from 'react';
-import { DEPARTMENTS } from '../constants.js';
 import { formatJP, toISO } from '../lib/date.js';
-import { projectRange, todoStats } from '../lib/project.js';
+import { phaseOf, projectRange, todoStats } from '../lib/project.js';
 import DeptChip from './DeptChip.jsx';
 import TodoList from './TodoList.jsx';
 
 /** 完了プロジェクト一覧（別ページ） */
-export default function CompletedPage({ projects, onRestore, onDelete }) {
+export default function CompletedPage({ projects, departments, onRestore, onDelete }) {
   const [keyword, setKeyword] = useState('');
   const [openId, setOpenId] = useState(null);
 
@@ -14,10 +13,10 @@ export default function CompletedPage({ projects, onRestore, onDelete }) {
     const q = keyword.trim().toLowerCase();
     if (!q) return projects;
     return projects.filter((p) => {
-      const owners = DEPARTMENTS.map((d) => p.phases[d.key]?.owner || '').join(' ');
+      const owners = departments.map((d) => phaseOf(p, d.id).owner).join(' ');
       return `${p.name} ${p.client} ${owners}`.toLowerCase().includes(q);
     });
-  }, [projects, keyword]);
+  }, [projects, departments, keyword]);
 
   return (
     <div className="completed">
@@ -32,13 +31,17 @@ export default function CompletedPage({ projects, onRestore, onDelete }) {
       </div>
 
       {projects.length === 0 && (
-        <p className="muted">完了したプロジェクトはまだありません。進行中ページで「✓ 完了にする」を押すとここに移動します。</p>
+        <p className="muted">
+          完了したプロジェクトはまだありません。進行中ページで「✓ 完了にする」を押すとここに移動します。
+        </p>
       )}
-      {projects.length > 0 && filtered.length === 0 && <p className="muted">該当するプロジェクトがありません。</p>}
+      {projects.length > 0 && filtered.length === 0 && (
+        <p className="muted">該当するプロジェクトがありません。</p>
+      )}
 
       <ul className="completed__list">
         {filtered.map((project) => {
-          const range = projectRange(project);
+          const range = projectRange(project, departments);
           const todo = todoStats(project);
           const open = openId === project.id;
           return (
@@ -52,6 +55,12 @@ export default function CompletedPage({ projects, onRestore, onDelete }) {
                       {project.client || '客先未設定'}
                       <span className="dot">・</span>
                       完了日 {formatJP(project.completedAt)}
+                      {project.launchDate && (
+                        <>
+                          <span className="dot">・</span>
+                          立ち上げ日 {formatJP(project.launchDate)}
+                        </>
+                      )}
                       {range && (
                         <>
                           <span className="dot">・</span>
@@ -63,13 +72,8 @@ export default function CompletedPage({ projects, onRestore, onDelete }) {
                 </div>
 
                 <div className="ccard__chips">
-                  {DEPARTMENTS.map((dept) => (
-                    <DeptChip
-                      key={dept.key}
-                      deptKey={dept.key}
-                      owner={project.phases[dept.key]?.owner}
-                      size="sm"
-                    />
+                  {departments.map((dept) => (
+                    <DeptChip key={dept.id} dept={dept} owner={phaseOf(project, dept.id).owner} />
                   ))}
                 </div>
 
@@ -105,10 +109,10 @@ export default function CompletedPage({ projects, onRestore, onDelete }) {
                 <div className="ccard__detail">
                   {project.note && <p className="ccard__note">{project.note}</p>}
                   <div className="ccard__phases">
-                    {DEPARTMENTS.map((dept) => {
-                      const phase = project.phases[dept.key];
+                    {departments.map((dept) => {
+                      const phase = phaseOf(project, dept.id);
                       return (
-                        <div className="ccard__phase" key={dept.key} style={{ '--dept-color': dept.color }}>
+                        <div className="ccard__phase" key={dept.id} style={{ '--dept-color': dept.color }}>
                           <span className="ccard__phase-label">{dept.label}</span>
                           <span className="ccard__phase-owner">{phase.owner || '担当未設定'}</span>
                           <span className="ccard__phase-date">
@@ -120,7 +124,7 @@ export default function CompletedPage({ projects, onRestore, onDelete }) {
                       );
                     })}
                   </div>
-                  <TodoList project={project} readOnly />
+                  <TodoList project={project} departments={departments} readOnly />
                 </div>
               )}
             </li>

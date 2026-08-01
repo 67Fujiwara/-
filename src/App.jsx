@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { DEPARTMENTS, ZOOM_LEVELS } from './constants.js';
-import { useProjects } from './hooks/useProjects.js';
+import { ZOOM_LEVELS } from './constants.js';
+import { useBoard } from './hooks/useBoard.js';
 import { addDays, today, toISO } from './lib/date.js';
 import GanttChart from './components/GanttChart.jsx';
 import ProjectDrawer from './components/ProjectDrawer.jsx';
 import CompletedPage from './components/CompletedPage.jsx';
+import DeptSettingsModal from './components/DeptSettingsModal.jsx';
 
 export default function App() {
   const {
+    departments,
     activeProjects,
     completedProjects,
     addProject,
@@ -21,7 +23,11 @@ export default function App() {
     addTodo,
     toggleTodo,
     removeTodo,
-  } = useProjects();
+    addDepartment,
+    updateDepartment,
+    moveDepartment,
+    removeDepartment,
+  } = useBoard();
 
   const [page, setPage] = useState('active');
   const [zoom, setZoom] = useState('week');
@@ -29,6 +35,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null);
   const [newProjectId, setNewProjectId] = useState(null);
   const [focusTodaySignal, setFocusTodaySignal] = useState(0);
+  const [deptSettingsOpen, setDeptSettingsOpen] = useState(false);
 
   const selected = useMemo(
     () => activeProjects.find((p) => p.id === selectedId) || null,
@@ -40,19 +47,25 @@ export default function App() {
     if (selectedId && !selected) setSelectedId(null);
   }, [selectedId, selected]);
 
+  // 削除された工程で絞り込んだままにならないようにする
+  useEffect(() => {
+    if (deptFilter && !departments.some((d) => d.id === deptFilter)) setDeptFilter('');
+  }, [deptFilter, departments]);
+
   const handleAdd = useCallback(() => {
     const base = today();
-    // 追加直後でもガントに現れるよう、今日から2週間の営業工程を仮置きする
+    const first = departments[0];
+    // 追加直後でもガントに現れるよう、先頭工程に今日から2週間を仮置きする
     const id = addProject({
       name: '新規プロジェクト',
-      phases: {
-        sales: { owner: '', start: toISO(base), end: toISO(addDays(base, 13)), progress: 0 },
-      },
+      phases: first
+        ? { [first.id]: { owner: '', start: toISO(base), end: toISO(addDays(base, 13)), progress: 0 } }
+        : {},
     });
     setPage('active');
     setSelectedId(id);
     setNewProjectId(id);
-  }, [addProject]);
+  }, [addProject, departments]);
 
   const handleComplete = useCallback(
     (id) => {
@@ -85,7 +98,7 @@ export default function App() {
       <header className="topbar">
         <div className="topbar__title">
           <h1>プロジェクト工程ボード</h1>
-          <p>営業・メカ・電気・CS の担当と進み具合を横一列で確認できます。</p>
+          <p>各工程の担当と進み具合を横一列で確認できます。</p>
         </div>
 
         <nav className="tabs" aria-label="ページ切り替え">
@@ -132,7 +145,7 @@ export default function App() {
           </div>
 
           <div className="toolbar__group">
-            <span className="toolbar__label">担当で強調</span>
+            <span className="toolbar__label">工程で強調</span>
             <div className="segmented segmented--dept">
               <button
                 type="button"
@@ -141,19 +154,22 @@ export default function App() {
               >
                 すべて
               </button>
-              {DEPARTMENTS.map((dept) => (
+              {departments.map((dept) => (
                 <button
                   type="button"
-                  key={dept.key}
-                  className={deptFilter === dept.key ? 'is-active' : ''}
+                  key={dept.id}
+                  className={deptFilter === dept.id ? 'is-active' : ''}
                   style={{ '--dept-color': dept.color }}
-                  onClick={() => setDeptFilter(deptFilter === dept.key ? '' : dept.key)}
+                  onClick={() => setDeptFilter(deptFilter === dept.id ? '' : dept.id)}
                 >
                   <span className="swatch" style={{ background: dept.color }} />
                   {dept.label}
                 </button>
               ))}
             </div>
+            <button type="button" className="btn btn--ghost" onClick={() => setDeptSettingsOpen(true)}>
+              工程を編集
+            </button>
           </div>
 
           <div className="toolbar__group toolbar__group--right">
@@ -171,6 +187,7 @@ export default function App() {
         {page === 'active' ? (
           <GanttChart
             projects={activeProjects}
+            departments={departments}
             zoom={zoom}
             selectedId={selectedId}
             deptFilter={deptFilter}
@@ -188,6 +205,7 @@ export default function App() {
         ) : (
           <CompletedPage
             projects={completedProjects}
+            departments={departments}
             onRestore={restoreProject}
             onDelete={removeProject}
           />
@@ -197,6 +215,7 @@ export default function App() {
       {selected && (
         <ProjectDrawer
           project={selected}
+          departments={departments}
           isNew={selected.id === newProjectId}
           onClose={() => setSelectedId(null)}
           onUpdate={updateProject}
@@ -205,6 +224,18 @@ export default function App() {
           onAddTodo={addTodo}
           onToggleTodo={toggleTodo}
           onRemoveTodo={removeTodo}
+          onOpenDeptSettings={() => setDeptSettingsOpen(true)}
+        />
+      )}
+
+      {deptSettingsOpen && (
+        <DeptSettingsModal
+          departments={departments}
+          onAdd={addDepartment}
+          onUpdate={updateDepartment}
+          onMove={moveDepartment}
+          onRemove={removeDepartment}
+          onClose={() => setDeptSettingsOpen(false)}
         />
       )}
     </div>

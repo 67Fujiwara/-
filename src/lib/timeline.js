@@ -15,14 +15,14 @@ import { projectRange } from './project.js';
 const MIN_SPAN_DAYS = 35;
 
 /** 表示対象プロジェクトから、目盛り付きのタイムライン情報を組み立てる */
-export function buildTimeline(projects, zoom) {
+export function buildTimeline(projects, zoom, departments) {
   const { dayWidth } = ZOOM_LEVELS[zoom] || ZOOM_LEVELS.week;
   const base = today();
 
   let min = null;
   let max = null;
   for (const project of projects) {
-    const range = projectRange(project);
+    const range = projectRange(project, departments);
     if (!range) continue;
     if (!min || range.start < min) min = range.start;
     if (!max || range.end > max) max = range.end;

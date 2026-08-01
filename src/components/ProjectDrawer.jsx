@@ -1,11 +1,11 @@
 import { useEffect, useRef } from 'react';
-import { DEPARTMENTS } from '../constants.js';
-import { clampProgress, projectProgress } from '../lib/project.js';
+import { clampProgress, phaseOf, phaseProgress, projectProgress } from '../lib/project.js';
 import TodoList from './TodoList.jsx';
 
 /** 選択中プロジェクトの詳細（担当・工程・TODO）を編集するサイドパネル */
 export default function ProjectDrawer({
   project,
+  departments,
   isNew,
   onClose,
   onUpdate,
@@ -14,6 +14,7 @@ export default function ProjectDrawer({
   onAddTodo,
   onToggleTodo,
   onRemoveTodo,
+  onOpenDeptSettings,
 }) {
   const nameRef = useRef(null);
 
@@ -34,13 +35,13 @@ export default function ProjectDrawer({
 
   if (!project) return null;
 
-  const setPhase = (deptKey, patch) => {
+  const setPhase = (deptId, patch) => {
     onUpdate(project.id, (p) => ({
-      phases: { ...p.phases, [deptKey]: { ...p.phases[deptKey], ...patch } },
+      phases: { ...p.phases, [deptId]: { ...phaseOf(p, deptId), ...patch } },
     }));
   };
 
-  const progress = projectProgress(project);
+  const progress = projectProgress(project, departments);
 
   return (
     <aside className="drawer" role="dialog" aria-label="プロジェクト詳細">
@@ -75,6 +76,14 @@ export default function ProjectDrawer({
             />
           </label>
           <label className="field">
+            <span>立ち上げ日</span>
+            <input
+              type="date"
+              value={project.launchDate}
+              onChange={(e) => onUpdate(project.id, { launchDate: e.target.value })}
+            />
+          </label>
+          <label className="field">
             <span>メモ</span>
             <textarea
               rows={2}
@@ -88,18 +97,20 @@ export default function ProjectDrawer({
         <section>
           <div className="section-head">
             <h4>担当と工程</h4>
-            <span className="badge">全体進捗 {progress}%</span>
+            <div className="section-head__right">
+              <span className="badge">全体進捗 {progress}%</span>
+              <button type="button" className="btn btn--ghost btn--sm" onClick={onOpenDeptSettings}>
+                工程を編集
+              </button>
+            </div>
           </div>
 
-          {DEPARTMENTS.map((dept) => {
-            const phase = project.phases[dept.key];
+          {departments.map((dept) => {
+            const phase = phaseOf(project, dept.id);
+            const prog = phaseProgress(project, dept.id);
             const invalid = phase.start && phase.end && phase.end < phase.start;
             return (
-              <div
-                className="phase"
-                key={dept.key}
-                style={{ '--dept-color': dept.color, '--dept-soft': dept.soft }}
-              >
+              <div className="phase" key={dept.id} style={{ '--dept-color': dept.color }}>
                 <div className="phase__head">
                   <span className="phase__label">{dept.label}</span>
                   <input
@@ -107,20 +118,20 @@ export default function ProjectDrawer({
                     className="phase__owner"
                     value={phase.owner}
                     placeholder="担当者名"
-                    onChange={(e) => setPhase(dept.key, { owner: e.target.value })}
+                    onChange={(e) => setPhase(dept.id, { owner: e.target.value })}
                   />
                 </div>
                 <div className="phase__dates">
                   <input
                     type="date"
                     value={phase.start}
-                    onChange={(e) => setPhase(dept.key, { start: e.target.value })}
+                    onChange={(e) => setPhase(dept.id, { start: e.target.value })}
                   />
                   <span className="phase__tilde">〜</span>
                   <input
                     type="date"
                     value={phase.end}
-                    onChange={(e) => setPhase(dept.key, { end: e.target.value })}
+                    onChange={(e) => setPhase(dept.id, { end: e.target.value })}
                   />
                 </div>
                 {invalid && <p className="warn">終了日が開始日より前です。日付を確認してください。</p>}
@@ -130,11 +141,17 @@ export default function ProjectDrawer({
                     min="0"
                     max="100"
                     step="5"
-                    value={phase.progress}
-                    onChange={(e) => setPhase(dept.key, { progress: clampProgress(e.target.value) })}
+                    value={prog.value}
+                    disabled={prog.auto}
+                    onChange={(e) => setPhase(dept.id, { progress: clampProgress(e.target.value) })}
                   />
-                  <span className="phase__pct">{phase.progress}%</span>
+                  <span className="phase__pct">{prog.value}%</span>
                 </div>
+                <p className="phase__hint">
+                  {prog.auto
+                    ? `この工程の TODO ${prog.done}/${prog.total} から自動計算しています`
+                    : 'この工程の TODO を追加すると、進捗は自動計算になります'}
+                </p>
               </div>
             );
           })}
@@ -143,6 +160,7 @@ export default function ProjectDrawer({
         <section>
           <TodoList
             project={project}
+            departments={departments}
             onAdd={onAddTodo}
             onToggle={onToggleTodo}
             onRemove={onRemoveTodo}

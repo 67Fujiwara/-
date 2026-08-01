@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { LANE_GAP, LANE_HEIGHT, ROW_PADDING } from '../constants.js';
 import { buildTimeline } from '../lib/timeline.js';
+import { todoStats } from '../lib/project.js';
 import GanttRow from './GanttRow.jsx';
+import TodoHoverCard from './TodoHoverCard.jsx';
 
 const LEFT_WIDTH = 360;
 
 /** 進行中プロジェクトを横一列（1行1プロジェクト）で並べるガントチャート */
 export default function GanttChart({
   projects,
+  departments,
   zoom,
   selectedId,
   deptFilter,
@@ -21,8 +25,15 @@ export default function GanttChart({
   const scrollRef = useRef(null);
   const [dragIndex, setDragIndex] = useState(null);
   const [dropIndex, setDropIndex] = useState(null);
+  const [hover, setHover] = useState(null);
 
-  const timeline = useMemo(() => buildTimeline(projects, zoom), [projects, zoom]);
+  const timeline = useMemo(
+    () => buildTimeline(projects, zoom, departments),
+    [projects, zoom, departments]
+  );
+
+  // 工程が増えるとレーンも増えるので、行の高さを工程数に合わせる
+  const rowHeight = ROW_PADDING + departments.length * (LANE_HEIGHT + LANE_GAP);
 
   // 「今日」が画面の左から1/3くらいに来るようにスクロールする
   useEffect(() => {
@@ -35,6 +46,7 @@ export default function GanttChart({
 
   const handleDragStart = (event, index) => {
     setDragIndex(index);
+    setHover(null);
     event.dataTransfer.effectAllowed = 'move';
     // Firefox はデータをセットしないとドラッグが始まらない
     event.dataTransfer.setData('text/plain', String(index));
@@ -60,12 +72,18 @@ export default function GanttChart({
     setDropIndex(null);
   };
 
+  // TODO が1件も無い行ではカードを出さない
+  const handleHover = (project, event) => {
+    if (dragIndex !== null || todoStats(project).total === 0) return;
+    setHover({ project, x: event.clientX, y: event.clientY });
+  };
+
   return (
     <div
       className={`gantt gantt--${zoom}`}
       style={{ '--left-w': `${LEFT_WIDTH}px`, '--day-w': `${timeline.dayWidth}px` }}
     >
-      <div className="gantt__scroll" ref={scrollRef}>
+      <div className="gantt__scroll" ref={scrollRef} onScroll={() => setHover(null)}>
         <div className="gantt__inner" style={{ width: LEFT_WIDTH + timeline.width }}>
           <div className="gantt__head">
             <div className="gantt__head-left">
@@ -101,15 +119,19 @@ export default function GanttChart({
                 project={project}
                 index={index}
                 total={projects.length}
+                departments={departments}
                 timeline={timeline}
+                rowHeight={rowHeight}
                 selected={project.id === selectedId}
                 deptFilter={deptFilter}
                 dragging={dragIndex === index}
                 dropTarget={dropIndex === index && dragIndex !== index}
                 onSelect={onSelect}
-                onMoveUp={(id) => onMoveUp(id)}
-                onMoveDown={(id) => onMoveDown(id)}
-                onMoveTop={(id) => onMoveTop(id)}
+                onMoveUp={onMoveUp}
+                onMoveDown={onMoveDown}
+                onMoveTop={onMoveTop}
+                onHover={handleHover}
+                onHoverEnd={() => setHover(null)}
                 onDragStart={handleDragStart}
                 onDragEnter={handleDragEnter}
                 onDragEnd={handleDragEnd}
@@ -141,6 +163,15 @@ export default function GanttChart({
         <p className="gantt__empty">
           進行中のプロジェクトはありません。「＋ プロジェクトを最下行に追加」から作成してください。
         </p>
+      )}
+
+      {hover && (
+        <TodoHoverCard
+          project={hover.project}
+          departments={departments}
+          x={hover.x}
+          y={hover.y}
+        />
       )}
     </div>
   );

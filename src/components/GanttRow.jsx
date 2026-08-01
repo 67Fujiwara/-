@@ -1,14 +1,15 @@
-import { DEPARTMENTS } from '../constants.js';
 import { formatJP, toISO } from '../lib/date.js';
-import { projectProgress, projectRange, todoStats } from '../lib/project.js';
+import { phaseOf, phaseProgress, projectProgress, projectRange, todoStats } from '../lib/project.js';
 import DeptChip from './DeptChip.jsx';
 
-/** ガントチャートの1行 = 1プロジェクト。行の中に部署ごとのレーンを重ねて表示する。 */
+/** ガントチャートの1行 = 1プロジェクト。行の中に工程ごとのレーンを並べて表示する。 */
 export default function GanttRow({
   project,
   index,
   total,
+  departments,
   timeline,
+  rowHeight,
   selected,
   deptFilter,
   dragging,
@@ -17,15 +18,18 @@ export default function GanttRow({
   onMoveUp,
   onMoveDown,
   onMoveTop,
+  onHover,
+  onHoverEnd,
   onDragStart,
   onDragEnter,
   onDragEnd,
   onDrop,
 }) {
-  const range = projectRange(project);
-  const progress = projectProgress(project);
+  const range = projectRange(project, departments);
+  const progress = projectProgress(project, departments);
   const todo = todoStats(project);
   const band = range ? timeline.barFor(toISO(range.start), toISO(range.end)) : null;
+  const launchX = project.launchDate ? timeline.xForISO(project.launchDate) : null;
 
   const rowClass = [
     'grow',
@@ -39,9 +43,13 @@ export default function GanttRow({
   return (
     <div
       className={rowClass}
+      style={{ minHeight: rowHeight }}
       onDragEnter={(e) => onDragEnter(e, index)}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => onDrop(e, index)}
+      onMouseEnter={(e) => onHover(project, e)}
+      onMouseMove={(e) => onHover(project, e)}
+      onMouseLeave={onHoverEnd}
     >
       <div
         className="grow__left"
@@ -93,6 +101,11 @@ export default function GanttRow({
         <div className="grow__meta">
           {project.client && <span className="grow__client">{project.client}</span>}
           <span className="grow__progress">進捗 {progress}%</span>
+          {project.launchDate && (
+            <span className="grow__launch" title="立ち上げ日">
+              ◆ {formatJP(project.launchDate)}
+            </span>
+          )}
           {todo.total > 0 && (
             <span className={`grow__todo ${todo.remaining === 0 ? 'is-done' : ''}`}>
               TODO {todo.done}/{todo.total}
@@ -101,13 +114,12 @@ export default function GanttRow({
         </div>
 
         <div className="grow__chips">
-          {DEPARTMENTS.map((dept) => (
+          {departments.map((dept) => (
             <DeptChip
-              key={dept.key}
-              deptKey={dept.key}
-              owner={project.phases[dept.key]?.owner}
-              dimmed={Boolean(deptFilter) && deptFilter !== dept.key}
-              size="sm"
+              key={dept.id}
+              dept={dept}
+              owner={phaseOf(project, dept.id).owner}
+              dimmed={Boolean(deptFilter) && deptFilter !== dept.id}
             />
           ))}
         </div>
@@ -117,32 +129,38 @@ export default function GanttRow({
         {band && (
           <div className="span-band" style={{ left: band.left, width: band.width }}>
             <span className="span-band__label">
-              {range ? `${formatJP(toISO(range.start))} 〜 ${formatJP(toISO(range.end))}` : ''}
+              {`${formatJP(toISO(range.start))} 〜 ${formatJP(toISO(range.end))}`}
             </span>
           </div>
         )}
 
+        {launchX !== null && (
+          <div
+            className="launch-marker"
+            style={{ left: launchX }}
+            title={`立ち上げ日 ${formatJP(project.launchDate)}`}
+          >
+            <span className="launch-marker__dot">◆</span>
+          </div>
+        )}
+
         <div className="lanes">
-          {DEPARTMENTS.map((dept) => {
-            const phase = project.phases[dept.key];
-            const bar = phase && phase.start && phase.end ? timeline.barFor(phase.start, phase.end) : null;
-            const dimmed = Boolean(deptFilter) && deptFilter !== dept.key;
+          {departments.map((dept) => {
+            const phase = phaseOf(project, dept.id);
+            const bar = phase.start && phase.end ? timeline.barFor(phase.start, phase.end) : null;
+            const dimmed = Boolean(deptFilter) && deptFilter !== dept.id;
+            const prog = phaseProgress(project, dept.id);
             return (
-              <div className="lane" key={dept.key}>
+              <div className="lane" key={dept.id}>
                 {bar && (
                   <div
                     className={`bar ${dimmed ? 'is-dimmed' : ''}`}
-                    style={{
-                      left: bar.left,
-                      width: bar.width,
-                      '--dept-color': dept.color,
-                      '--dept-soft': dept.soft,
-                    }}
+                    style={{ left: bar.left, width: bar.width, '--dept-color': dept.color }}
                     title={`${dept.label} ${phase.owner || '担当未設定'}\n${formatJP(phase.start)} 〜 ${formatJP(
                       phase.end
-                    )}\n進捗 ${phase.progress}%`}
+                    )}\n進捗 ${prog.value}%${prog.auto ? `（TODO ${prog.done}/${prog.total} から自動）` : ''}`}
                   >
-                    <span className="bar__fill" style={{ width: `${phase.progress}%` }} />
+                    <span className="bar__fill" style={{ width: `${prog.value}%` }} />
                     <span className="bar__text">
                       {dept.label}
                       {phase.owner ? ` ${phase.owner}` : ''}

@@ -1,31 +1,34 @@
 import { useState } from 'react';
-import { DEPARTMENTS, DEPT_MAP } from '../constants.js';
 import { formatJP, todayISO } from '../lib/date.js';
+import { findDepartment } from '../lib/departments.js';
 
-/** プロジェクトごとの TODO リスト */
+const emptyForm = { text: '', dept: '', start: '', end: '' };
+
+/** プロジェクトごとの TODO リスト（開始日〜終了日つき） */
 export default function TodoList({
   project,
+  departments = [],
   onAdd = () => {},
   onToggle = () => {},
   onRemove = () => {},
   readOnly = false,
 }) {
-  const [text, setText] = useState('');
-  const [dept, setDept] = useState('');
-  const [due, setDue] = useState('');
+  const [form, setForm] = useState(emptyForm);
+  const set = (patch) => setForm((prev) => ({ ...prev, ...patch }));
 
   const submit = (event) => {
     event.preventDefault();
-    if (!text.trim()) return;
-    onAdd(project.id, text, dept, due);
-    setText('');
-    setDue('');
+    if (!form.text.trim()) return;
+    onAdd(project.id, form);
+    // 続けて入力しやすいよう、部署の選択は残す
+    setForm({ ...emptyForm, dept: form.dept });
   };
 
   const done = project.todos.filter((t) => t.done).length;
   const total = project.todos.length;
   const rate = total === 0 ? 0 : Math.round((done / total) * 100);
   const today = todayISO();
+  const invalidRange = form.start && form.end && form.end < form.start;
 
   return (
     <div className="todos">
@@ -44,8 +47,8 @@ export default function TodoList({
 
       <ul className="todos__list">
         {project.todos.map((item) => {
-          const overdue = !item.done && item.due && item.due < today;
-          const deptInfo = DEPT_MAP[item.dept];
+          const overdue = !item.done && item.end && item.end < today;
+          const dept = findDepartment(departments, item.dept);
           return (
             <li key={item.id} className={`todo ${item.done ? 'is-done' : ''}`}>
               <label className="todo__main">
@@ -58,17 +61,14 @@ export default function TodoList({
                 <span className="todo__text">{item.text}</span>
               </label>
               <span className="todo__tags">
-                {deptInfo && (
-                  <span
-                    className="todo__dept"
-                    style={{ '--dept-color': deptInfo.color, '--dept-soft': deptInfo.soft }}
-                  >
-                    {deptInfo.label}
+                {dept && (
+                  <span className="todo__dept" style={{ '--dept-color': dept.color }}>
+                    {dept.label}
                   </span>
                 )}
-                {item.due && (
+                {(item.start || item.end) && (
                   <span className={`todo__due ${overdue ? 'is-overdue' : ''}`}>
-                    〆 {formatJP(item.due)}
+                    {item.start ? formatJP(item.start) : '—'} 〜 {item.end ? formatJP(item.end) : '—'}
                   </span>
                 )}
                 {!readOnly && (
@@ -91,24 +91,39 @@ export default function TodoList({
         <form className="todos__form" onSubmit={submit}>
           <input
             type="text"
-            value={text}
+            value={form.text}
             placeholder="やることを入力"
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => set({ text: e.target.value })}
           />
           <div className="todos__form-row">
-            <select value={dept} onChange={(e) => setDept(e.target.value)} title="担当部署">
-              <option value="">部署なし</option>
-              {DEPARTMENTS.map((d) => (
-                <option key={d.key} value={d.key}>
+            <select value={form.dept} onChange={(e) => set({ dept: e.target.value })} title="担当工程">
+              <option value="">工程なし</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
                   {d.label}
                 </option>
               ))}
             </select>
-            <input type="date" value={due} onChange={(e) => setDue(e.target.value)} title="期限" />
+          </div>
+          <div className="todos__form-row">
+            <input
+              type="date"
+              value={form.start}
+              onChange={(e) => set({ start: e.target.value })}
+              title="開始日"
+            />
+            <span className="todos__tilde">〜</span>
+            <input
+              type="date"
+              value={form.end}
+              onChange={(e) => set({ end: e.target.value })}
+              title="終了日"
+            />
             <button type="submit" className="btn btn--primary">
               追加
             </button>
           </div>
+          {invalidRange && <p className="warn">終了日が開始日より前です。</p>}
         </form>
       )}
     </div>
