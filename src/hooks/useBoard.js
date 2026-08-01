@@ -212,6 +212,60 @@ export function useBoard() {
     });
   }, []);
 
+  /* ---------- プロジェクト専用の工程 ---------- */
+
+  const addProjectDepartment = useCallback(
+    (projectId, label) => {
+      updateProject(projectId, (p) => {
+        const dept = createDepartment([...departments, ...p.customDepartments], label);
+        return {
+          customDepartments: [...p.customDepartments, dept],
+          phases: { ...p.phases, [dept.id]: emptyPhase() },
+        };
+      });
+    },
+    [departments, updateProject]
+  );
+
+  const updateProjectDepartment = useCallback(
+    (projectId, deptId, patch) => {
+      updateProject(projectId, (p) => ({
+        customDepartments: p.customDepartments.map((d) => (d.id === deptId ? { ...d, ...patch } : d)),
+      }));
+    },
+    [updateProject]
+  );
+
+  const moveProjectDepartment = useCallback(
+    (projectId, deptId, delta) => {
+      updateProject(projectId, (p) => {
+        const list = p.customDepartments.slice();
+        const from = list.findIndex((d) => d.id === deptId);
+        const to = from + delta;
+        if (from < 0 || to < 0 || to >= list.length) return {};
+        const [moved] = list.splice(from, 1);
+        list.splice(to, 0, moved);
+        return { customDepartments: list };
+      });
+    },
+    [updateProject]
+  );
+
+  const removeProjectDepartment = useCallback(
+    (projectId, deptId) => {
+      updateProject(projectId, (p) => {
+        const phases = { ...p.phases };
+        delete phases[deptId];
+        return {
+          customDepartments: p.customDepartments.filter((d) => d.id !== deptId),
+          phases,
+          todos: p.todos.map((t) => (t.dept === deptId ? { ...t, dept: '' } : t)),
+        };
+      });
+    },
+    [updateProject]
+  );
+
   return {
     departments,
     projects,
@@ -232,5 +286,9 @@ export function useBoard() {
     updateDepartment,
     moveDepartment,
     removeDepartment,
+    addProjectDepartment,
+    updateProjectDepartment,
+    moveProjectDepartment,
+    removeProjectDepartment,
   };
 }

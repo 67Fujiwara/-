@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { formatJP, toISO } from '../lib/date.js';
-import { phaseOf, projectRange, todoStats } from '../lib/project.js';
+import { departmentsFor, phaseOf, projectRange, todoStats } from '../lib/project.js';
 import DeptChip from './DeptChip.jsx';
 import TodoList from './TodoList.jsx';
 
@@ -42,6 +42,7 @@ export default function CompletedPage({ projects, departments, onRestore, onDele
       <ul className="completed__list">
         {filtered.map((project) => {
           const range = projectRange(project, departments);
+          const allDepts = departmentsFor(project, departments);
           const todo = todoStats(project);
           const open = openId === project.id;
           return (
@@ -72,7 +73,7 @@ export default function CompletedPage({ projects, departments, onRestore, onDele
                 </div>
 
                 <div className="ccard__chips">
-                  {departments.map((dept) => (
+                  {allDepts.map((dept) => (
                     <DeptChip key={dept.id} dept={dept} owner={phaseOf(project, dept.id).owner} />
                   ))}
                 </div>
@@ -109,7 +110,7 @@ export default function CompletedPage({ projects, departments, onRestore, onDele
                 <div className="ccard__detail">
                   {project.note && <p className="ccard__note">{project.note}</p>}
                   <div className="ccard__phases">
-                    {departments.map((dept) => {
+                    {allDepts.map((dept) => {
                       const phase = phaseOf(project, dept.id);
                       return (
                         <div className="ccard__phase" key={dept.id} style={{ '--dept-color': dept.color }}>
@@ -124,7 +125,7 @@ export default function CompletedPage({ projects, departments, onRestore, onDele
                       );
                     })}
                   </div>
-                  <TodoList project={project} departments={departments} readOnly />
+                  <TodoList project={project} departments={allDepts} readOnly />
                 </div>
               )}
             </li>

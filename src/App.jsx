@@ -27,6 +27,10 @@ export default function App() {
     updateDepartment,
     moveDepartment,
     removeDepartment,
+    addProjectDepartment,
+    updateProjectDepartment,
+    moveProjectDepartment,
+    removeProjectDepartment,
   } = useBoard();
 
   const [page, setPage] = useState('active');
@@ -231,10 +235,15 @@ export default function App() {
       {deptSettingsOpen && (
         <DeptSettingsModal
           departments={departments}
+          project={selected}
           onAdd={addDepartment}
           onUpdate={updateDepartment}
           onMove={moveDepartment}
           onRemove={removeDepartment}
+          onAddProjectDept={addProjectDepartment}
+          onUpdateProjectDept={updateProjectDepartment}
+          onMoveProjectDept={moveProjectDepartment}
+          onRemoveProjectDept={removeProjectDepartment}
           onClose={() => setDeptSettingsOpen(false)}
         />
       )}

@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatJP, todayISO } from '../lib/date.js';
 import { findDepartment } from '../lib/departments.js';
 
-const emptyForm = { text: '', dept: '', start: '', end: '' };
+const ALL = '__all__';
+const NONE = '';
 
-/** プロジェクトごとの TODO リスト（開始日〜終了日つき） */
+/** プロジェクトごとの TODO リスト。工程タブで切り替えて表示する。 */
 export default function TodoList({
   project,
   departments = [],
@@ -13,22 +14,42 @@ export default function TodoList({
   onRemove = () => {},
   readOnly = false,
 }) {
-  const [form, setForm] = useState(emptyForm);
+  const [activeDept, setActiveDept] = useState(() => departments[0]?.id ?? ALL);
+  const [form, setForm] = useState({ text: '', start: '', end: '' });
   const set = (patch) => setForm((prev) => ({ ...prev, ...patch }));
+
+  // 工程が入れ替わって選択中のタブが無くなったら先頭に戻す
+  const hasNoDeptTodos = project.todos.some((t) => !t.dept);
+  const tabs = useMemo(() => {
+    const list = departments.map((d) => ({ id: d.id, label: d.label, color: d.color }));
+    if (hasNoDeptTodos || activeDept === NONE) {
+      list.push({ id: NONE, label: '工程なし', color: '#94a3b8' });
+    }
+    list.push({ id: ALL, label: 'すべて', color: '#64748b' });
+    return list;
+  }, [departments, hasNoDeptTodos, activeDept]);
+
+  const current = tabs.some((t) => t.id === activeDept) ? activeDept : (tabs[0]?.id ?? ALL);
+
+  const countOf = (deptId) => {
+    const list = deptId === ALL ? project.todos : project.todos.filter((t) => t.dept === deptId);
+    return { total: list.length, done: list.filter((t) => t.done).length, list };
+  };
+
+  const { list: visible, total, done } = countOf(current);
+  const rate = total === 0 ? 0 : Math.round((done / total) * 100);
+  const today = todayISO();
+  const invalidRange = form.start && form.end && form.end < form.start;
 
   const submit = (event) => {
     event.preventDefault();
     if (!form.text.trim()) return;
-    onAdd(project.id, form);
-    // 続けて入力しやすいよう、部署の選択は残す
-    setForm({ ...emptyForm, dept: form.dept });
+    // 「すべて」タブで追加したときは工程なしとして登録する
+    onAdd(project.id, { ...form, dept: current === ALL ? NONE : current });
+    setForm({ text: '', start: '', end: '' });
   };
 
-  const done = project.todos.filter((t) => t.done).length;
-  const total = project.todos.length;
-  const rate = total === 0 ? 0 : Math.round((done / total) * 100);
-  const today = todayISO();
-  const invalidRange = form.start && form.end && form.end < form.start;
+  const currentTab = tabs.find((t) => t.id === current);
 
   return (
     <div className="todos">
@@ -39,14 +60,42 @@ export default function TodoList({
         </span>
       </div>
 
+      <div className="todotabs" role="tablist">
+        {tabs.map((tab) => {
+          const c = countOf(tab.id);
+          return (
+            <button
+              type="button"
+              key={tab.id || 'none'}
+              role="tab"
+              aria-selected={tab.id === current}
+              className={`todotab ${tab.id === current ? 'is-active' : ''}`}
+              style={{ '--dept-color': tab.color }}
+              onClick={() => setActiveDept(tab.id)}
+            >
+              {tab.label}
+              <span className="todotab__count">
+                {c.done}/{c.total}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       <div className="todos__bar">
         <span style={{ width: `${rate}%` }} />
       </div>
 
-      {total === 0 && <p className="muted">まだ TODO がありません。</p>}
+      {total === 0 && (
+        <p className="muted">
+          {current === ALL
+            ? 'まだ TODO がありません。'
+            : `「${currentTab?.label}」の TODO はまだありません。`}
+        </p>
+      )}
 
       <ul className="todos__list">
-        {project.todos.map((item) => {
+        {visible.map((item) => {
           const overdue = !item.done && item.end && item.end < today;
           const dept = findDepartment(departments, item.dept);
           return (
@@ -61,7 +110,7 @@ export default function TodoList({
                 <span className="todo__text">{item.text}</span>
               </label>
               <span className="todo__tags">
-                {dept && (
+                {current === ALL && dept && (
                   <span className="todo__dept" style={{ '--dept-color': dept.color }}>
                     {dept.label}
                   </span>
@@ -92,19 +141,11 @@ export default function TodoList({
           <input
             type="text"
             value={form.text}
-            placeholder="やることを入力"
+            placeholder={
+              current === ALL ? 'やることを入力（工程なしで追加）' : `「${currentTab?.label}」のやることを入力`
+            }
             onChange={(e) => set({ text: e.target.value })}
           />
-          <div className="todos__form-row">
-            <select value={form.dept} onChange={(e) => set({ dept: e.target.value })} title="担当工程">
-              <option value="">工程なし</option>
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.label}
-                </option>
-              ))}
-            </select>
-          </div>
           <div className="todos__form-row">
             <input
               type="date"

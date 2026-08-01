@@ -1,4 +1,5 @@
 import { parseDate, spanDays, todayISO } from './date.js';
+import { normalizeDepartments } from './departments.js';
 
 export function createId(prefix = 'p') {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -19,6 +20,7 @@ export function createProject(input = {}, departments = []) {
     client: input.client?.trim() || '',
     note: input.note?.trim() || '',
     launchDate: input.launchDate || '',
+    customDepartments: input.customDepartments || [],
     phases: { ...emptyPhases(departments), ...(input.phases || {}) },
     todos: input.todos || [],
     completedAt: null,
@@ -28,9 +30,15 @@ export function createProject(input = {}, departments = []) {
 
 /** 保存データを現在のスキーマに合わせて補正する（古いデータ・壊れたデータ対策） */
 export function normalizeProject(raw, departments = []) {
+  // このプロジェクトだけで使う工程
+  const customDepartments = normalizeDepartments(raw?.customDepartments, false);
   const phases = {};
   // 工程定義にあるものと、保存済みデータに残っているものの両方を残す
-  const phaseIds = new Set([...departments.map((d) => d.id), ...Object.keys(raw?.phases || {})]);
+  const phaseIds = new Set([
+    ...departments.map((d) => d.id),
+    ...customDepartments.map((d) => d.id),
+    ...Object.keys(raw?.phases || {}),
+  ]);
   for (const id of phaseIds) {
     const p = raw?.phases?.[id] || {};
     phases[id] = {
@@ -46,6 +54,7 @@ export function normalizeProject(raw, departments = []) {
     client: raw?.client || '',
     note: raw?.note || '',
     launchDate: typeof raw?.launchDate === 'string' ? raw.launchDate : '',
+    customDepartments,
     phases,
     todos: Array.isArray(raw?.todos)
       ? raw.todos.map((t) => ({
@@ -67,6 +76,11 @@ export function clampProgress(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return 0;
   return Math.min(100, Math.max(0, Math.round(n)));
+}
+
+/** 共通工程 + このプロジェクトだけの工程 */
+export function departmentsFor(project, departments = []) {
+  return [...departments, ...(project?.customDepartments || [])];
 }
 
 export function phaseOf(project, deptId) {
@@ -98,7 +112,7 @@ export function phaseProgress(project, deptId) {
 
 /** 日付が入っている工程だけを返す */
 export function scheduledPhases(project, departments) {
-  return departments
+  return departmentsFor(project, departments)
     .map((dept) => ({ dept, phase: phaseOf(project, dept.id) }))
     .filter(({ phase }) => phase.start && phase.end);
 }

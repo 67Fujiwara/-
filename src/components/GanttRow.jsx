@@ -1,5 +1,13 @@
 import { formatJP, toISO } from '../lib/date.js';
-import { phaseOf, phaseProgress, projectProgress, projectRange, todoStats } from '../lib/project.js';
+import {
+  departmentsFor,
+  phaseOf,
+  phaseProgress,
+  projectProgress,
+  projectRange,
+  todoStats,
+  todosOfDept,
+} from '../lib/project.js';
 import DeptChip from './DeptChip.jsx';
 
 /** ガントチャートの1行 = 1プロジェクト。行の中に工程ごとのレーンを並べて表示する。 */
@@ -8,6 +16,7 @@ export default function GanttRow({
   index,
   total,
   departments,
+  laneCount,
   timeline,
   rowHeight,
   selected,
@@ -18,18 +27,21 @@ export default function GanttRow({
   onMoveUp,
   onMoveDown,
   onMoveTop,
-  onHover,
+  onBarHover,
   onHoverEnd,
   onDragStart,
   onDragEnter,
   onDragEnd,
   onDrop,
 }) {
+  const allDepts = departmentsFor(project, departments);
   const range = projectRange(project, departments);
   const progress = projectProgress(project, departments);
   const todo = todoStats(project);
   const band = range ? timeline.barFor(toISO(range.start), toISO(range.end)) : null;
   const launchX = project.launchDate ? timeline.xForISO(project.launchDate) : null;
+  // 行の高さを揃えるため、工程が少ない行は空のレーンで埋める
+  const fillerLanes = Math.max(0, laneCount - allDepts.length);
 
   const rowClass = [
     'grow',
@@ -47,9 +59,6 @@ export default function GanttRow({
       onDragEnter={(e) => onDragEnter(e, index)}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => onDrop(e, index)}
-      onMouseEnter={(e) => onHover(project, e)}
-      onMouseMove={(e) => onHover(project, e)}
-      onMouseLeave={onHoverEnd}
     >
       <div
         className="grow__left"
@@ -114,7 +123,7 @@ export default function GanttRow({
         </div>
 
         <div className="grow__chips">
-          {departments.map((dept) => (
+          {allDepts.map((dept) => (
             <DeptChip
               key={dept.id}
               dept={dept}
@@ -145,20 +154,24 @@ export default function GanttRow({
         )}
 
         <div className="lanes">
-          {departments.map((dept) => {
+          {allDepts.map((dept) => {
             const phase = phaseOf(project, dept.id);
             const bar = phase.start && phase.end ? timeline.barFor(phase.start, phase.end) : null;
             const dimmed = Boolean(deptFilter) && deptFilter !== dept.id;
             const prog = phaseProgress(project, dept.id);
+            const deptTodos = todosOfDept(project, dept.id);
             return (
               <div className="lane" key={dept.id}>
                 {bar && (
                   <div
-                    className={`bar ${dimmed ? 'is-dimmed' : ''}`}
+                    className={`bar ${dimmed ? 'is-dimmed' : ''} ${deptTodos.length > 0 ? 'has-todo' : ''}`}
                     style={{ left: bar.left, width: bar.width, '--dept-color': dept.color }}
                     title={`${dept.label} ${phase.owner || '担当未設定'}\n${formatJP(phase.start)} 〜 ${formatJP(
                       phase.end
                     )}\n進捗 ${prog.value}%${prog.auto ? `（TODO ${prog.done}/${prog.total} から自動）` : ''}`}
+                    onMouseEnter={(e) => onBarHover(project, dept, deptTodos, e)}
+                    onMouseMove={(e) => onBarHover(project, dept, deptTodos, e)}
+                    onMouseLeave={onHoverEnd}
                   >
                     <span className="bar__fill" style={{ width: `${prog.value}%` }} />
                     <span className="bar__text">
@@ -170,6 +183,9 @@ export default function GanttRow({
               </div>
             );
           })}
+          {Array.from({ length: fillerLanes }, (_, i) => (
+            <div className="lane" key={`filler-${i}`} />
+          ))}
         </div>
       </div>
     </div>

@@ -14,9 +14,13 @@ export function createDepartment(departments, label = '新しい工程') {
   return { id: createDepartmentId(), label, color: nextColor(departments) };
 }
 
-/** 保存データの工程定義を補正する。空・壊れている場合は初期値に戻す。 */
-export function normalizeDepartments(list) {
-  if (!Array.isArray(list)) return DEFAULT_DEPARTMENTS.map((d) => ({ ...d }));
+/**
+ * 保存データの工程定義を補正する。
+ * 共通工程（fallbackToDefault=true）は空にできないので初期値に戻し、
+ * プロジェクト専用工程は空配列のままでよい。
+ */
+export function normalizeDepartments(list, fallbackToDefault = true) {
+  if (!Array.isArray(list)) return fallbackToDefault ? DEFAULT_DEPARTMENTS.map((d) => ({ ...d })) : [];
   const seen = new Set();
   const result = [];
   for (const raw of list) {
@@ -29,7 +33,8 @@ export function normalizeDepartments(list) {
       color: /^#[0-9a-fA-F]{6}$/.test(raw?.color) ? raw.color : DEPT_COLOR_PALETTE[result.length % DEPT_COLOR_PALETTE.length],
     });
   }
-  return result.length > 0 ? result : DEFAULT_DEPARTMENTS.map((d) => ({ ...d }));
+  if (result.length > 0) return result;
+  return fallbackToDefault ? DEFAULT_DEPARTMENTS.map((d) => ({ ...d })) : [];
 }
 
 export function findDepartment(departments, id) {

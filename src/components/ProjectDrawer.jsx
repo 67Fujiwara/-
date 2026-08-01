@@ -1,5 +1,11 @@
 import { useEffect, useRef } from 'react';
-import { clampProgress, phaseOf, phaseProgress, projectProgress } from '../lib/project.js';
+import {
+  clampProgress,
+  departmentsFor,
+  phaseOf,
+  phaseProgress,
+  projectProgress,
+} from '../lib/project.js';
 import TodoList from './TodoList.jsx';
 
 /** 選択中プロジェクトの詳細（担当・工程・TODO）を編集するサイドパネル */
@@ -42,6 +48,8 @@ export default function ProjectDrawer({
   };
 
   const progress = projectProgress(project, departments);
+  const allDepts = departmentsFor(project, departments);
+  const customIds = new Set((project.customDepartments || []).map((d) => d.id));
 
   return (
     <aside className="drawer" role="dialog" aria-label="プロジェクト詳細">
@@ -105,14 +113,21 @@ export default function ProjectDrawer({
             </div>
           </div>
 
-          {departments.map((dept) => {
+          {allDepts.map((dept) => {
             const phase = phaseOf(project, dept.id);
             const prog = phaseProgress(project, dept.id);
             const invalid = phase.start && phase.end && phase.end < phase.start;
             return (
               <div className="phase" key={dept.id} style={{ '--dept-color': dept.color }}>
                 <div className="phase__head">
-                  <span className="phase__label">{dept.label}</span>
+                  <span className="phase__label">
+                    {dept.label}
+                    {customIds.has(dept.id) && (
+                      <span className="phase__own" title="このプロジェクトだけの工程">
+                        専用
+                      </span>
+                    )}
+                  </span>
                   <input
                     type="text"
                     className="phase__owner"
@@ -160,7 +175,7 @@ export default function ProjectDrawer({
         <section>
           <TodoList
             project={project}
-            departments={departments}
+            departments={allDepts}
             onAdd={onAddTodo}
             onToggle={onToggleTodo}
             onRemove={onRemoveTodo}

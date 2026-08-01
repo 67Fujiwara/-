@@ -1541,3 +1541,119 @@ textarea {
   font-size: 12px;
   align-self: center;
 }
+
+/* ---------- TODO の工程タブ ---------- */
+.todotabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0 6px;
+}
+
+.todotab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.todotab:hover {
+  background: var(--bg);
+}
+
+.todotab.is-active {
+  background: color-mix(in srgb, var(--dept-color) 14%, white);
+  border-color: color-mix(in srgb, var(--dept-color) 45%, white);
+  color: color-mix(in srgb, var(--dept-color) 78%, black);
+  font-weight: 700;
+}
+
+.todotab__count {
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+
+.todotab.is-active .todotab__count {
+  background: #fff;
+  border-color: color-mix(in srgb, var(--dept-color) 35%, white);
+}
+
+/* ---------- 工程の設定（セクション分け） ---------- */
+.deptsection {
+  margin-bottom: 20px;
+}
+
+.deptsection h4 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.deptsection__target {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deptsection__hint {
+  margin: 0;
+}
+
+.deptsection .muted {
+  margin: 0 0 8px;
+}
+
+/* プロジェクト専用工程の目印 */
+.phase__own {
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dept-color) 16%, white);
+  border: 1px solid color-mix(in srgb, var(--dept-color) 40%, white);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.phase__label {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 120px;
+}
+
+/* ホバーカードの工程名 */
+.hovercard__head .hovercard__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.hovercard__head .hovercard__dept {
+  flex: 0 0 auto;
+}
+
+/* TODO のあるバーは点線の下線で分かるようにする */
+.bar.has-todo {
+  box-shadow: inset 0 -2px 0 -1px color-mix(in srgb, var(--dept-color) 70%, white);
+}
+
+.bar.has-todo:hover {
+  filter: brightness(0.94);
+}

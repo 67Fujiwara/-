@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { LANE_GAP, LANE_HEIGHT, ROW_PADDING } from '../constants.js';
 import { buildTimeline } from '../lib/timeline.js';
-import { todoStats } from '../lib/project.js';
+import { departmentsFor } from '../lib/project.js';
 import GanttRow from './GanttRow.jsx';
 import TodoHoverCard from './TodoHoverCard.jsx';
 
@@ -32,8 +32,12 @@ export default function GanttChart({
     [projects, zoom, departments]
   );
 
-  // 工程が増えるとレーンも増えるので、行の高さを工程数に合わせる
-  const rowHeight = ROW_PADDING + departments.length * (LANE_HEIGHT + LANE_GAP);
+  // プロジェクト専用の工程を持つ行に合わせて、全行のレーン数と高さを揃える
+  const laneCount = projects.reduce(
+    (max, p) => Math.max(max, departmentsFor(p, departments).length),
+    departments.length
+  );
+  const rowHeight = ROW_PADDING + laneCount * (LANE_HEIGHT + LANE_GAP);
 
   // 「今日」が画面の左から1/3くらいに来るようにスクロールする
   useEffect(() => {
@@ -72,10 +76,10 @@ export default function GanttChart({
     setDropIndex(null);
   };
 
-  // TODO が1件も無い行ではカードを出さない
-  const handleHover = (project, event) => {
-    if (dragIndex !== null || todoStats(project).total === 0) return;
-    setHover({ project, x: event.clientX, y: event.clientY });
+  // ガントのバーに乗せたときだけ、その工程の TODO を出す
+  const handleBarHover = (project, dept, todos, event) => {
+    if (dragIndex !== null || todos.length === 0) return;
+    setHover({ project, dept, todos, x: event.clientX, y: event.clientY });
   };
 
   return (
@@ -120,6 +124,7 @@ export default function GanttChart({
                 index={index}
                 total={projects.length}
                 departments={departments}
+                laneCount={laneCount}
                 timeline={timeline}
                 rowHeight={rowHeight}
                 selected={project.id === selectedId}
@@ -130,7 +135,7 @@ export default function GanttChart({
                 onMoveUp={onMoveUp}
                 onMoveDown={onMoveDown}
                 onMoveTop={onMoveTop}
-                onHover={handleHover}
+                onBarHover={handleBarHover}
                 onHoverEnd={() => setHover(null)}
                 onDragStart={handleDragStart}
                 onDragEnter={handleDragEnter}
@@ -168,7 +173,8 @@ export default function GanttChart({
       {hover && (
         <TodoHoverCard
           project={hover.project}
-          departments={departments}
+          dept={hover.dept}
+          todos={hover.todos}
           x={hover.x}
           y={hover.y}
         />
