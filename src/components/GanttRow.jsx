@@ -15,11 +15,10 @@ export default function GanttRow({
   project,
   index,
   total,
-  laneCount,
   timeline,
   rowHeight,
   selected,
-  deptFilter,
+  deptFilters,
   dragging,
   dropTarget,
   onSelect,
@@ -39,8 +38,7 @@ export default function GanttRow({
   const todo = todoStats(project);
   const band = range ? timeline.barFor(toISO(range.start), toISO(range.end)) : null;
   const launchX = project.launchDate ? timeline.xForISO(project.launchDate) : null;
-  // 行の高さを揃えるため、工程が少ない行は空のレーンで埋める
-  const fillerLanes = Math.max(0, laneCount - allDepts.length);
+  const isDimmed = (dept) => deptFilters.length > 0 && !deptFilters.includes(dept.label);
 
   const rowClass = [
     'grow',
@@ -127,7 +125,7 @@ export default function GanttRow({
               key={dept.id}
               dept={dept}
               owner={phaseOf(project, dept.id).owner}
-              dimmed={Boolean(deptFilter) && deptFilter !== dept.label}
+              dimmed={isDimmed(dept)}
             />
           ))}
         </div>
@@ -156,7 +154,7 @@ export default function GanttRow({
           {allDepts.map((dept) => {
             const phase = phaseOf(project, dept.id);
             const bar = phase.start && phase.end ? timeline.barFor(phase.start, phase.end) : null;
-            const dimmed = Boolean(deptFilter) && deptFilter !== dept.label;
+            const dimmed = isDimmed(dept);
             const prog = phaseProgress(project, dept.id);
             const deptTodos = todosOfDept(project, dept.id);
             return (
@@ -182,9 +180,6 @@ export default function GanttRow({
               </div>
             );
           })}
-          {Array.from({ length: fillerLanes }, (_, i) => (
-            <div className="lane" key={`filler-${i}`} />
-          ))}
         </div>
       </div>
     </div>

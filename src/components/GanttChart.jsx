@@ -12,7 +12,7 @@ export default function GanttChart({
   projects,
   zoom,
   selectedId,
-  deptFilter,
+  deptFilters,
   focusTodaySignal,
   onSelect,
   onMoveUp,
@@ -28,9 +28,9 @@ export default function GanttChart({
 
   const timeline = useMemo(() => buildTimeline(projects, zoom), [projects, zoom]);
 
-  // 工程数はプロジェクトごとに違うので、一番多い行に合わせて全行の高さを揃える
-  const laneCount = projects.reduce((max, p) => Math.max(max, departmentsOf(p).length), 1);
-  const rowHeight = ROW_PADDING + laneCount * (LANE_HEIGHT + LANE_GAP);
+  // 工程数はプロジェクトごとに違うので、行の高さもその行の工程数に合わせる
+  const rowHeightOf = (project) =>
+    ROW_PADDING + Math.max(1, departmentsOf(project).length) * (LANE_HEIGHT + LANE_GAP);
 
   // 「今日」が画面の左から1/3くらいに来るようにスクロールする
   useEffect(() => {
@@ -116,11 +116,10 @@ export default function GanttChart({
                 project={project}
                 index={index}
                 total={projects.length}
-                laneCount={laneCount}
                 timeline={timeline}
-                rowHeight={rowHeight}
+                rowHeight={rowHeightOf(project)}
                 selected={project.id === selectedId}
-                deptFilter={deptFilter}
+                deptFilters={deptFilters}
                 dragging={dragIndex === index}
                 dropTarget={dropIndex === index && dragIndex !== index}
                 onSelect={onSelect}

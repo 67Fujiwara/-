@@ -6,6 +6,7 @@ import { departmentsOf } from './lib/project.js';
 import GanttChart from './components/GanttChart.jsx';
 import ProjectDrawer from './components/ProjectDrawer.jsx';
 import CompletedPage from './components/CompletedPage.jsx';
+import DeptFilterMenu from './components/DeptFilterMenu.jsx';
 
 export default function App() {
   const {
@@ -30,7 +31,7 @@ export default function App() {
 
   const [page, setPage] = useState('active');
   const [zoom, setZoom] = useState('week');
-  const [deptFilter, setDeptFilter] = useState('');
+  const [deptFilters, setDeptFilters] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [newProjectId, setNewProjectId] = useState(null);
   const [focusTodaySignal, setFocusTodaySignal] = useState(0);
@@ -45,13 +46,15 @@ export default function App() {
     if (selectedId && !selected) setSelectedId(null);
   }, [selectedId, selected]);
 
-  // 工程はプロジェクトごとに持つので、強調フィルタは全プロジェクトの工程名をまとめて作る
-  // （同じ名前の工程は、プロジェクトが違っても1つのボタンにまとめる）
+  // 工程はプロジェクトごとに持つので、強調の選択肢は全プロジェクトの工程名をまとめて作る
+  // （同じ名前の工程は、プロジェクトが違っても1つにまとめ、使用プロジェクト数を添える）
   const filterDepartments = useMemo(() => {
     const map = new Map();
     for (const project of activeProjects) {
       for (const dept of departmentsOf(project)) {
-        if (!map.has(dept.label)) map.set(dept.label, dept);
+        const found = map.get(dept.label);
+        if (found) found.count += 1;
+        else map.set(dept.label, { label: dept.label, color: dept.color, count: 1 });
       }
     }
     return [...map.values()];
@@ -59,8 +62,17 @@ export default function App() {
 
   // 無くなった工程名で絞り込んだままにならないようにする
   useEffect(() => {
-    if (deptFilter && !filterDepartments.some((d) => d.label === deptFilter)) setDeptFilter('');
-  }, [deptFilter, filterDepartments]);
+    setDeptFilters((prev) => {
+      const next = prev.filter((label) => filterDepartments.some((d) => d.label === label));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [filterDepartments]);
+
+  const toggleDeptFilter = useCallback((label) => {
+    setDeptFilters((prev) =>
+      prev.includes(label) ? prev.filter((l) => l !== label) : [...prev, label]
+    );
+  }, []);
 
   const handleAdd = useCallback(() => {
     const base = today();
@@ -161,27 +173,12 @@ export default function App() {
 
           <div className="toolbar__group">
             <span className="toolbar__label">工程で強調</span>
-            <div className="segmented segmented--dept">
-              <button
-                type="button"
-                className={deptFilter === '' ? 'is-active' : ''}
-                onClick={() => setDeptFilter('')}
-              >
-                すべて
-              </button>
-              {filterDepartments.map((dept) => (
-                <button
-                  type="button"
-                  key={dept.label}
-                  className={deptFilter === dept.label ? 'is-active' : ''}
-                  style={{ '--dept-color': dept.color }}
-                  onClick={() => setDeptFilter(deptFilter === dept.label ? '' : dept.label)}
-                >
-                  <span className="swatch" style={{ background: dept.color }} />
-                  {dept.label}
-                </button>
-              ))}
-            </div>
+            <DeptFilterMenu
+              departments={filterDepartments}
+              selected={deptFilters}
+              onToggle={toggleDeptFilter}
+              onClear={() => setDeptFilters([])}
+            />
           </div>
 
           <div className="toolbar__group toolbar__group--right">
@@ -201,7 +198,7 @@ export default function App() {
             projects={activeProjects}
             zoom={zoom}
             selectedId={selectedId}
-            deptFilter={deptFilter}
+            deptFilters={deptFilters}
             focusTodaySignal={focusTodaySignal}
             onSelect={(id) => {
               setSelectedId(id);
