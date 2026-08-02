@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  assignmentProgress,
+  assignmentsOf,
   clampProgress,
   departmentsOf,
   isSafeUrl,
-  phaseOf,
+  packAssignments,
   phaseProgress,
   projectProgress,
 } from '../lib/project.js';
@@ -25,9 +27,13 @@ export default function ProjectDrawer({
   onUpdateDept,
   onMoveDept,
   onRemoveDept,
+  onAddAssignment,
+  onUpdateAssignment,
+  onRemoveAssignment,
 }) {
   const nameRef = useRef(null);
   const [newDeptLabel, setNewDeptLabel] = useState('');
+  const [notice, setNotice] = useState('');
 
   useEffect(() => {
     if (isNew && nameRef.current) {
@@ -49,16 +55,19 @@ export default function ProjectDrawer({
   const departments = departmentsOf(project);
   const progress = projectProgress(project);
 
-  const setPhase = (deptId, patch) => {
-    onUpdate(project.id, (p) => ({
-      phases: { ...p.phases, [deptId]: { ...phaseOf(p, deptId), ...patch } },
-    }));
-  };
-
   const submitDept = (event) => {
     event.preventDefault();
-    onAddDept(project.id, newDeptLabel.trim() || '新しい工程');
+    const name = newDeptLabel.trim() || '新しい工程';
+    // 同じ名前の工程が既にあるときは、列を増やさずその工程に担当を足す
+    const existing = departments.find((d) => d.label.trim() === name);
+    onAddDept(project.id, name);
     setNewDeptLabel('');
+    setNotice(
+      existing
+        ? `「${existing.label}」は既にあるので、同じ列に担当を追加しました`
+        : `工程「${name}」を追加しました`
+    );
+    window.setTimeout(() => setNotice(''), 5000);
   };
 
   return (
@@ -138,13 +147,14 @@ export default function ProjectDrawer({
             <span className="badge">全体進捗 {progress}%</span>
           </div>
           <p className="section-note">
-            工程はこのプロジェクトだけのものです。追加・削除しても他のプロジェクトには影響しません。
+            工程はこのプロジェクトだけのものです。1つの工程に担当を複数入れると、
+            期間が重ならない限りガントの同じ列に並びます。
           </p>
 
           {departments.map((dept, index) => {
-            const phase = phaseOf(project, dept.id);
-            const prog = phaseProgress(project, dept.id);
-            const invalid = phase.start && phase.end && phase.end < phase.start;
+            const assignments = assignmentsOf(project, dept.id);
+            const deptProg = phaseProgress(project, dept.id);
+            const laneCount = Math.max(1, packAssignments(assignments).length);
             return (
               <div className="phase" key={dept.id} style={{ '--dept-color': dept.color }}>
                 <div className="phase__head">
@@ -188,7 +198,7 @@ export default function ProjectDrawer({
                       onClick={() => {
                         if (
                           window.confirm(
-                            `「${project.name}」から工程「${dept.label}」を削除します。\n担当者・期間も削除され、この工程の TODO は「工程なし」になります。\n（他のプロジェクトには影響しません）`
+                            `「${project.name}」から工程「${dept.label}」を削除します。\n担当者・期間もすべて削除され、この工程の TODO は「工程なし」になります。\n（他のプロジェクトには影響しません）`
                           )
                         ) {
                           onRemoveDept(project.id, dept.id);
@@ -200,49 +210,88 @@ export default function ProjectDrawer({
                   </span>
                 </div>
 
-                <div className="phase__owner-row">
-                  <span className="phase__sublabel">担当</span>
-                  <input
-                    type="text"
-                    className="phase__owner"
-                    value={phase.owner}
-                    placeholder="担当者名"
-                    onChange={(e) => setPhase(dept.id, { owner: e.target.value })}
-                  />
-                </div>
+                {assignments.map((assignment, ai) => {
+                  const prog = assignmentProgress(project, dept.id, assignment);
+                  const invalid =
+                    assignment.start && assignment.end && assignment.end < assignment.start;
+                  const set = (patch) =>
+                    onUpdateAssignment(project.id, dept.id, assignment.id, patch);
+                  return (
+                    <div className="assign" key={assignment.id}>
+                      <div className="assign__row">
+                        <span className="phase__sublabel">
+                          {assignments.length > 1 ? `担当${ai + 1}` : '担当'}
+                        </span>
+                        <input
+                          type="text"
+                          className="phase__owner"
+                          value={assignment.owner}
+                          placeholder="担当者名"
+                          onChange={(e) => set({ owner: e.target.value })}
+                        />
+                        <button
+                          type="button"
+                          className="iconbtn iconbtn--danger"
+                          title="この担当を削除"
+                          disabled={assignments.length <= 1}
+                          onClick={() => onRemoveAssignment(project.id, dept.id, assignment.id)}
+                        >
+                          ×
+                        </button>
+                      </div>
 
-                <div className="phase__dates">
-                  <input
-                    type="date"
-                    value={phase.start}
-                    onChange={(e) => setPhase(dept.id, { start: e.target.value })}
-                  />
-                  <span className="phase__tilde">〜</span>
-                  <input
-                    type="date"
-                    value={phase.end}
-                    onChange={(e) => setPhase(dept.id, { end: e.target.value })}
-                  />
-                </div>
-                {invalid && <p className="warn">終了日が開始日より前です。日付を確認してください。</p>}
+                      <div className="phase__dates">
+                        <input
+                          type="date"
+                          value={assignment.start}
+                          onChange={(e) => set({ start: e.target.value })}
+                        />
+                        <span className="phase__tilde">〜</span>
+                        <input
+                          type="date"
+                          value={assignment.end}
+                          onChange={(e) => set({ end: e.target.value })}
+                        />
+                      </div>
+                      {invalid && <p className="warn">終了日が開始日より前です。日付を確認してください。</p>}
 
-                <div className="phase__progress">
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="5"
-                    value={prog.value}
-                    disabled={prog.auto}
-                    onChange={(e) => setPhase(dept.id, { progress: clampProgress(e.target.value) })}
-                  />
-                  <span className="phase__pct">{prog.value}%</span>
+                      <div className="phase__progress">
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          step="5"
+                          value={prog.value}
+                          disabled={prog.auto}
+                          onChange={(e) => set({ progress: clampProgress(e.target.value) })}
+                        />
+                        <span className="phase__pct">{prog.value}%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <div className="phase__foot">
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => onAddAssignment(project.id, dept.id)}
+                  >
+                    ＋ 担当を追加
+                  </button>
+                  <span className="phase__hint">
+                    {[
+                      deptProg.auto ? `TODO ${deptProg.done}/${deptProg.total} から自動計算` : null,
+                      laneCount > 1
+                        ? `期間が重なるため ${laneCount} 段で表示`
+                        : assignments.length > 1
+                          ? '同じ列に並んでいます'
+                          : null,
+                    ]
+                      .filter(Boolean)
+                      .join('・')}
+                  </span>
                 </div>
-                <p className="phase__hint">
-                  {prog.auto
-                    ? `この工程の TODO ${prog.done}/${prog.total} から自動計算しています`
-                    : 'この工程の TODO を追加すると、進捗は自動計算になります'}
-                </p>
               </div>
             );
           })}
@@ -256,12 +305,19 @@ export default function ProjectDrawer({
               type="text"
               value={newDeptLabel}
               placeholder="工程名（例：修正対応、据付、試運転）"
+              list="dept-name-suggestions"
               onChange={(e) => setNewDeptLabel(e.target.value)}
             />
+            <datalist id="dept-name-suggestions">
+              {departments.map((d) => (
+                <option key={d.id} value={d.label} />
+              ))}
+            </datalist>
             <button type="submit" className="btn btn--primary">
               ＋ 工程を追加
             </button>
           </form>
+          {notice && <p className="phaseadd__notice">{notice}</p>}
         </section>
 
         <section>

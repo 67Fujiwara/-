@@ -1,8 +1,10 @@
+import { LANE_GAP, LANE_HEIGHT } from '../constants.js';
 import { formatJP, toISO } from '../lib/date.js';
 import {
+  assignmentProgress,
+  assignmentsOf,
   departmentsOf,
-  phaseOf,
-  phaseProgress,
+  packAssignments,
   projectProgress,
   projectRange,
   todoStats,
@@ -93,7 +95,7 @@ export default function GanttRow({
             <DeptChip
               key={dept.id}
               dept={dept}
-              owner={phaseOf(project, dept.id).owner}
+              owners={assignmentsOf(project, dept.id).map((a) => a.owner)}
               dimmed={isDimmed(dept)}
             />
           ))}
@@ -121,30 +123,52 @@ export default function GanttRow({
 
         <div className="lanes">
           {allDepts.map((dept) => {
-            const phase = phaseOf(project, dept.id);
-            const bar = phase.start && phase.end ? timeline.barFor(phase.start, phase.end) : null;
+            const assignments = assignmentsOf(project, dept.id);
+            // 期間が重ならない担当は同じ段に並べる（重なる分だけ段が増える）
+            const stack = packAssignments(assignments);
+            const laneCount = Math.max(1, stack.length);
             const dimmed = isDimmed(dept);
-            const prog = phaseProgress(project, dept.id);
             const deptTodos = todosOfDept(project, dept.id);
+
             return (
-              <div className="lane" key={dept.id}>
-                {bar && (
-                  <div
-                    className={`bar ${dimmed ? 'is-dimmed' : ''} ${deptTodos.length > 0 ? 'has-todo' : ''}`}
-                    style={{ left: bar.left, width: bar.width, '--dept-color': dept.color }}
-                    title={`${dept.label} ${phase.owner || '担当未設定'}\n${formatJP(phase.start)} 〜 ${formatJP(
-                      phase.end
-                    )}\n進捗 ${prog.value}%${prog.auto ? `（TODO ${prog.done}/${prog.total} から自動）` : ''}`}
-                    onMouseEnter={(e) => onBarHover(project, dept, deptTodos, e)}
-                    onMouseMove={(e) => onBarHover(project, dept, deptTodos, e)}
-                    onMouseLeave={onHoverEnd}
-                  >
-                    <span className="bar__fill" style={{ width: `${prog.value}%` }} />
-                    <span className="bar__text">
-                      {dept.label}
-                      {phase.owner ? ` ${phase.owner}` : ''}
-                    </span>
-                  </div>
+              <div
+                className="lane"
+                key={dept.id}
+                style={{ height: laneCount * LANE_HEIGHT + (laneCount - 1) * LANE_GAP }}
+              >
+                {stack.flatMap((laneAssignments, laneIndex) =>
+                  laneAssignments.map((assignment) => {
+                    const bar = timeline.barFor(assignment.start, assignment.end);
+                    if (!bar) return null;
+                    const prog = assignmentProgress(project, dept.id, assignment);
+                    return (
+                      <div
+                        key={assignment.id}
+                        className={`bar ${dimmed ? 'is-dimmed' : ''} ${deptTodos.length > 0 ? 'has-todo' : ''}`}
+                        style={{
+                          left: bar.left,
+                          width: bar.width,
+                          top: laneIndex * (LANE_HEIGHT + LANE_GAP),
+                          height: LANE_HEIGHT,
+                          '--dept-color': dept.color,
+                        }}
+                        title={`${dept.label} ${assignment.owner || '担当未設定'}\n${formatJP(
+                          assignment.start
+                        )} 〜 ${formatJP(assignment.end)}\n進捗 ${prog.value}%${
+                          prog.auto ? `（TODO ${prog.done}/${prog.total} から自動）` : ''
+                        }`}
+                        onMouseEnter={(e) => onBarHover(project, dept, deptTodos, e)}
+                        onMouseMove={(e) => onBarHover(project, dept, deptTodos, e)}
+                        onMouseLeave={onHoverEnd}
+                      >
+                        <span className="bar__fill" style={{ width: `${prog.value}%` }} />
+                        <span className="bar__text">
+                          {dept.label}
+                          {assignment.owner ? ` ${assignment.owner}` : ''}
+                        </span>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             );

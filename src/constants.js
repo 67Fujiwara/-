@@ -33,4 +33,4 @@ export const LANE_GAP = 3;
 export const ROW_PADDING = 34;
 
 export const STORAGE_KEY = 'project-gantt-board:v1';
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;

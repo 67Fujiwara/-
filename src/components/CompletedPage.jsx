@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { formatJP, toISO } from '../lib/date.js';
-import { departmentsOf, phaseOf, projectRange, todoStats } from '../lib/project.js';
+import { assignmentsOf, departmentsOf, projectRange, todoStats } from '../lib/project.js';
 import DeptChip from './DeptChip.jsx';
 import SlackLink from './SlackLink.jsx';
 import TodoList from './TodoList.jsx';
@@ -15,7 +15,7 @@ export default function CompletedPage({ projects, onRestore, onDelete }) {
     if (!q) return projects;
     return projects.filter((p) => {
       const owners = departmentsOf(p)
-        .map((d) => phaseOf(p, d.id).owner)
+        .flatMap((d) => assignmentsOf(p, d.id).map((a) => a.owner))
         .join(' ');
       return `${p.name} ${p.client} ${owners}`.toLowerCase().includes(q);
     });
@@ -80,7 +80,11 @@ export default function CompletedPage({ projects, onRestore, onDelete }) {
 
                 <div className="ccard__chips">
                   {allDepts.map((dept) => (
-                    <DeptChip key={dept.id} dept={dept} owner={phaseOf(project, dept.id).owner} />
+                    <DeptChip
+                      key={dept.id}
+                      dept={dept}
+                      owners={assignmentsOf(project, dept.id).map((a) => a.owner)}
+                    />
                   ))}
                 </div>
 
@@ -116,20 +120,23 @@ export default function CompletedPage({ projects, onRestore, onDelete }) {
                 <div className="ccard__detail">
                   {project.note && <p className="ccard__note">{project.note}</p>}
                   <div className="ccard__phases">
-                    {allDepts.map((dept) => {
-                      const phase = phaseOf(project, dept.id);
-                      return (
-                        <div className="ccard__phase" key={dept.id} style={{ '--dept-color': dept.color }}>
-                          <span className="ccard__phase-label">{dept.label}</span>
-                          <span className="ccard__phase-owner">{phase.owner || '担当未設定'}</span>
+                    {allDepts.flatMap((dept) =>
+                      assignmentsOf(project, dept.id).map((a, i) => (
+                        <div
+                          className="ccard__phase"
+                          key={a.id}
+                          style={{ '--dept-color': dept.color }}
+                        >
+                          <span className="ccard__phase-label">{i === 0 ? dept.label : ''}</span>
+                          <span className="ccard__phase-owner">{a.owner || '担当未設定'}</span>
                           <span className="ccard__phase-date">
-                            {phase.start && phase.end
-                              ? `${formatJP(phase.start)} 〜 ${formatJP(phase.end)}`
+                            {a.start && a.end
+                              ? `${formatJP(a.start)} 〜 ${formatJP(a.end)}`
                               : '期間未設定'}
                           </span>
                         </div>
-                      );
-                    })}
+                      ))
+                    )}
                   </div>
                   <TodoList project={project} departments={allDepts} readOnly />
                 </div>

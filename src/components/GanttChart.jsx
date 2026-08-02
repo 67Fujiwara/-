@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { LANE_GAP, LANE_HEIGHT, ROW_PADDING } from '../constants.js';
 import { buildTimeline } from '../lib/timeline.js';
-import { departmentsOf } from '../lib/project.js';
+import { departmentsOf, laneCountOf } from '../lib/project.js';
 import GanttRow from './GanttRow.jsx';
 import TodoHoverCard from './TodoHoverCard.jsx';
 
@@ -24,9 +24,11 @@ export default function GanttChart({
 
   const timeline = useMemo(() => buildTimeline(projects, zoom), [projects, zoom]);
 
-  // 工程数はプロジェクトごとに違うので、行の高さもその行の工程数に合わせる
-  const rowHeightOf = (project) =>
-    ROW_PADDING + Math.max(1, departmentsOf(project).length) * (LANE_HEIGHT + LANE_GAP);
+  // 行の高さは、その行の工程数（＋期間が重なって段が増えた分）に合わせる
+  const rowHeightOf = (project) => {
+    const lanes = departmentsOf(project).reduce((sum, d) => sum + laneCountOf(project, d.id), 0);
+    return ROW_PADDING + Math.max(1, lanes) * (LANE_HEIGHT + LANE_GAP);
+  };
 
   // 「今日」が画面の左から1/3くらいに来るようにスクロールする
   useEffect(() => {

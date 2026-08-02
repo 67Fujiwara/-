@@ -25,6 +25,9 @@ export default function App() {
     toggleTodo,
     removeTodo,
     addDepartment,
+    addAssignment,
+    updateAssignment,
+    removeAssignment,
     updateDepartment,
     moveDepartment,
     removeDepartment,
@@ -238,6 +241,9 @@ export default function App() {
           onToggleTodo={toggleTodo}
           onRemoveTodo={removeTodo}
           onAddDept={addDepartment}
+          onAddAssignment={addAssignment}
+          onUpdateAssignment={updateAssignment}
+          onRemoveAssignment={removeAssignment}
           onUpdateDept={updateDepartment}
           onMoveDept={moveDepartment}
           onRemoveDept={removeDepartment}

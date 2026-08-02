@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { loadProjects, saveProjects } from '../lib/storage.js';
 import { createDepartment } from '../lib/departments.js';
-import { createId, createProject, departmentsOf, emptyPhase } from '../lib/project.js';
+import {
+  assignmentsOf,
+  createId,
+  createProject,
+  departmentsOf,
+  emptyAssignment,
+  emptyPhase,
+} from '../lib/project.js';
 import { todayISO } from '../lib/date.js';
 
 /** 進行中プロジェクトだけを並べ替える（完了プロジェクトの位置は動かさない） */
@@ -119,13 +126,65 @@ export function useBoard() {
 
   /* ---------- 工程（担当区分）: すべてプロジェクト単位 ---------- */
 
+  /**
+   * 工程を追加する。同じ名前の工程が既にある場合は列を増やさず、
+   * その工程に担当（＋期間）を1件足す。
+   */
   const addDepartment = useCallback(
     (projectId, label) => {
+      const name = label.trim();
       updateProject(projectId, (p) => {
-        const dept = createDepartment(departmentsOf(p), label);
+        const existing = departmentsOf(p).find((d) => d.label.trim() === name);
+        if (existing) {
+          return {
+            phases: {
+              ...p.phases,
+              [existing.id]: [...assignmentsOf(p, existing.id), emptyAssignment()],
+            },
+          };
+        }
+        const dept = createDepartment(departmentsOf(p), name || '新しい工程');
         return {
           departments: [...departmentsOf(p), dept],
           phases: { ...p.phases, [dept.id]: emptyPhase() },
+        };
+      });
+    },
+    [updateProject]
+  );
+
+  /* ---------- 担当（工程の中の1本のバー） ---------- */
+
+  const addAssignment = useCallback(
+    (projectId, deptId) => {
+      updateProject(projectId, (p) => ({
+        phases: { ...p.phases, [deptId]: [...assignmentsOf(p, deptId), emptyAssignment()] },
+      }));
+    },
+    [updateProject]
+  );
+
+  const updateAssignment = useCallback(
+    (projectId, deptId, assignmentId, patch) => {
+      updateProject(projectId, (p) => ({
+        phases: {
+          ...p.phases,
+          [deptId]: assignmentsOf(p, deptId).map((a) =>
+            a.id === assignmentId ? { ...a, ...patch } : a
+          ),
+        },
+      }));
+    },
+    [updateProject]
+  );
+
+  const removeAssignment = useCallback(
+    (projectId, deptId, assignmentId) => {
+      updateProject(projectId, (p) => {
+        const rest = assignmentsOf(p, deptId).filter((a) => a.id !== assignmentId);
+        // 最後の1件は消さず、空欄として残す
+        return {
+          phases: { ...p.phases, [deptId]: rest.length > 0 ? rest : [emptyAssignment()] },
         };
       });
     },
@@ -187,6 +246,9 @@ export function useBoard() {
     toggleTodo,
     removeTodo,
     addDepartment,
+    addAssignment,
+    updateAssignment,
+    removeAssignment,
     updateDepartment,
     moveDepartment,
     removeDepartment,

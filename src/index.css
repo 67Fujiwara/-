@@ -679,14 +679,11 @@ textarea {
 
 .lane {
   position: relative;
-  flex: 0 0 12px;
-  height: 12px;
+  flex: 0 0 auto;
 }
 
 .bar {
   position: absolute;
-  top: 0;
-  bottom: 0;
   display: flex;
   align-items: center;
   border-radius: 4px;
@@ -1754,4 +1751,53 @@ textarea {
   color: var(--danger);
   background: #fee2e2;
   border-color: #fecaca;
+}
+
+/* ---------- 工程の中の担当（複数持てる） ---------- */
+.assign {
+  padding: 6px 0;
+  border-top: 1px dashed var(--line);
+  margin-top: 6px;
+}
+
+.phase > .assign:first-of-type {
+  border-top: 0;
+  margin-top: 4px;
+  padding-top: 2px;
+}
+
+.assign__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.phase__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--line);
+}
+
+.phase__foot .phase__hint {
+  margin: 0;
+  text-align: right;
+}
+
+.phaseadd__notice {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: #166534;
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+
+.phase__foot .btn--sm {
+  white-space: nowrap;
+  flex: 0 0 auto;
 }

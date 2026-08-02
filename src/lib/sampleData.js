@@ -27,7 +27,11 @@ export function sampleProjects() {
       launchDate: d(52),
       phases: {
         sales: { owner: '山田', start: d(-30), end: d(-5), progress: 100 },
-        mecha: { owner: '佐藤', start: d(-10), end: d(25), progress: 60 },
+        // 同じ工程に担当を2件（期間が重ならないので同じ列に並ぶ）
+        mecha: [
+          { owner: '佐藤', start: d(-10), end: d(12), progress: 100 },
+          { owner: '中村', start: d(14), end: d(25), progress: 20 },
+        ],
         elec: { owner: '鈴木', start: d(5), end: d(40), progress: 20 },
         cs: { owner: '田中', start: d(38), end: d(55), progress: 0 },
         fix_sample: { owner: '小林', start: d(45), end: d(58), progress: 0 },
