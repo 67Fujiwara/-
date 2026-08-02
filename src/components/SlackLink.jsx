@@ -1,22 +1,17 @@
 import { isSafeUrl } from '../lib/project.js';
+import LinkChip from './LinkChip.jsx';
 
-/**
- * Slack スレッドへのリンク。
- * URL は長いので表示せず、アイコン1つ分の幅だけを使う（URL はツールチップで確認できる）。
- */
-export default function SlackLink({ url, className = '' }) {
+/** Slack スレッドへのリンク */
+export default function SlackLink({ url }) {
   if (!isSafeUrl(url)) return null;
   return (
-    <a
-      className={`slack-link ${className}`}
+    <LinkChip
       href={url}
-      target="_blank"
-      rel="noreferrer noopener"
+      color="#4a154b"
+      label="Slack のスレッドを開く"
       title={`Slack のスレッドを開く\n${url}`}
-      aria-label="Slack のスレッドを開く"
-      onClick={(e) => e.stopPropagation()}
     >
       #
-    </a>
+    </LinkChip>
   );
 }

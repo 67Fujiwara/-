@@ -43,6 +43,7 @@ export function createProject(input = {}) {
     note: input.note?.trim() || '',
     launchDate: input.launchDate || '',
     slackUrl: input.slackUrl || '',
+    folderUrl: input.folderUrl || '',
     departments,
     phases: { ...emptyPhases(departments), ...(input.phases || {}) },
     todos: input.todos || [],
@@ -77,6 +78,7 @@ export function normalizeProject(raw, fallbackDepartments = DEFAULT_DEPARTMENTS)
     note: raw?.note || '',
     launchDate: typeof raw?.launchDate === 'string' ? raw.launchDate : '',
     slackUrl: typeof raw?.slackUrl === 'string' ? raw.slackUrl : '',
+    folderUrl: typeof raw?.folderUrl === 'string' ? raw.folderUrl : '',
     departments,
     phases,
     todos: Array.isArray(raw?.todos)
@@ -113,6 +115,35 @@ export function isSafeUrl(url) {
   } catch {
     return false;
   }
+}
+
+/**
+ * フォルダを開くためのリンク先を組み立てる。
+ * ダイレクトクラウドなどの Web URL のほか、Windows のフォルダパスも受け付け、
+ * file:// のリンクに変換する。開けない形式なら null を返す。
+ *   例) https://xxx.direct-cloud.jp/...        → そのまま
+ *       C:\Users\yuta\DirectCloud\A案件      → file:///C:/Users/...
+ *       \\server\share\A案件                  → file://server/share/...
+ */
+export function toFolderHref(value) {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  if (!raw) return null;
+
+  const encodePath = (path) =>
+    encodeURI(path.replace(/\\/g, '/')).replace(/#/g, '%23').replace(/\?/g, '%3F');
+
+  // UNC パス（\\サーバー名\共有名\...）
+  if (/^\\\\[^\\]/.test(raw)) return `file://${encodePath(raw.slice(2))}`;
+  // ドライブレター（C:\... / C:/...）
+  if (/^[A-Za-z]:[\\/]/.test(raw)) return `file:///${encodePath(raw)}`;
+
+  try {
+    const { protocol } = new URL(raw);
+    if (protocol === 'http:' || protocol === 'https:' || protocol === 'file:') return raw;
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 /** このプロジェクトの工程一覧 */

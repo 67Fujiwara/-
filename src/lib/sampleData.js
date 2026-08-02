@@ -22,6 +22,7 @@ export function sampleProjects() {
       client: '株式会社サンプル製作所',
       note: '最優先案件。立ち上げ日は客先の稼働開始に合わせて調整済み。',
       slackUrl: 'https://example.slack.com/archives/C0123456789/p1700000000000000',
+      folderUrl: 'https://example.direct-cloud.jp/folder/0123456789',
       // 工程はプロジェクトごとなので、この案件にだけ「修正対応」を足してある
       departments: [...DEFAULT_DEPARTMENTS, { id: 'fix_sample', label: '修正対応', color: '#db2777' }],
       launchDate: d(52),

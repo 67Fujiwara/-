@@ -3,6 +3,7 @@ import { formatJP, toISO } from '../lib/date.js';
 import { assignmentsOf, departmentsOf, projectRange, todoStats } from '../lib/project.js';
 import DeptChip from './DeptChip.jsx';
 import SlackLink from './SlackLink.jsx';
+import FolderLink from './FolderLink.jsx';
 import TodoList from './TodoList.jsx';
 
 /** 完了プロジェクト一覧（別ページ） */
@@ -57,6 +58,7 @@ export default function CompletedPage({ projects, onRestore, onDelete }) {
                     <h3 className="ccard__name">
                       {project.name}
                       <SlackLink url={project.slackUrl} />
+                      <FolderLink url={project.folderUrl} />
                     </h3>
                     <p className="ccard__sub">
                       {project.client || '客先未設定'}

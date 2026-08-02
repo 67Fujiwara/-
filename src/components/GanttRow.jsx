@@ -12,6 +12,7 @@ import {
 } from '../lib/project.js';
 import DeptChip from './DeptChip.jsx';
 import SlackLink from './SlackLink.jsx';
+import FolderLink from './FolderLink.jsx';
 
 /** ガントチャートの1行 = 1プロジェクト。行の中に工程ごとのレーンを並べて表示する。 */
 export default function GanttRow({
@@ -73,6 +74,7 @@ export default function GanttRow({
             {project.name}
           </button>
           <SlackLink url={project.slackUrl} />
+          <FolderLink url={project.folderUrl} />
         </div>
 
         <div className="grow__meta">

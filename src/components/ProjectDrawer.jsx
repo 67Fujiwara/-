@@ -6,11 +6,13 @@ import {
   departmentsOf,
   isSafeUrl,
   packAssignments,
+  toFolderHref,
   phaseProgress,
   projectProgress,
 } from '../lib/project.js';
 import TodoList from './TodoList.jsx';
 import SlackLink from './SlackLink.jsx';
+import FolderLink from './FolderLink.jsx';
 
 /** 選択中プロジェクトの詳細（担当・工程・TODO）を編集するサイドパネル */
 export default function ProjectDrawer({
@@ -78,6 +80,7 @@ export default function ProjectDrawer({
           <h3 className="drawer__name">
             {project.name}
             <SlackLink url={project.slackUrl} />
+            <FolderLink url={project.folderUrl} />
           </h3>
         </div>
         <button type="button" className="iconbtn iconbtn--lg" onClick={onClose} title="閉じる（Esc）">
@@ -128,6 +131,24 @@ export default function ProjectDrawer({
             />
             {project.slackUrl && !isSafeUrl(project.slackUrl) && (
               <p className="warn">http:// または https:// で始まるURLを貼り付けてください。</p>
+            )}
+          </label>
+          <label className="field">
+            <span>
+              プロジェクトのフォルダ
+              <span className="field__hint">ダイレクトクラウドのURL、またはフォルダのパス</span>
+            </span>
+            <input
+              type="text"
+              className="field__url"
+              value={project.folderUrl}
+              placeholder="https://... または C:\Users\... / \\サーバー名\共有名\..."
+              onChange={(e) => onUpdate(project.id, { folderUrl: e.target.value })}
+            />
+            {project.folderUrl && !toFolderHref(project.folderUrl) && (
+              <p className="warn">
+                URL（https://…）か、Windows のフォルダパス（C:\… または \\サーバー名\…）を入れてください。
+              </p>
             )}
           </label>
           <label className="field">

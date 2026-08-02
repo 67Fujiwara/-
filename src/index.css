@@ -1672,8 +1672,8 @@ textarea {
   padding: 0 6px;
 }
 
-/* ---------- Slack スレッドへのリンク ---------- */
-.slack-link {
+/* ---------- プロジェクト名の右に並ぶ小さなリンク（Slack / フォルダ） ---------- */
+.linkchip {
   flex: 0 0 auto;
   width: 18px;
   height: 18px;
@@ -1681,7 +1681,7 @@ textarea {
   align-items: center;
   justify-content: center;
   border-radius: 5px;
-  background: #4a154b;
+  background: var(--chip-color);
   color: #fff;
   font-size: 12px;
   font-weight: 700;
@@ -1690,12 +1690,12 @@ textarea {
   transition: filter 0.12s ease, transform 0.12s ease;
 }
 
-.slack-link:hover {
+.linkchip:hover {
   filter: brightness(1.25);
   transform: translateY(-1px);
 }
 
-.slack-link:focus-visible {
+.linkchip:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
