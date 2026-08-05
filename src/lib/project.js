@@ -117,33 +117,39 @@ export function isSafeUrl(url) {
   }
 }
 
+/** リンクにしてはいけないスキーム */
+const BLOCKED_SCHEMES = new Set(['javascript:', 'data:', 'vbscript:', 'blob:']);
+
 /**
- * フォルダを開くためのリンク先を組み立てる。
- * ダイレクトクラウドなどの Web URL のほか、Windows のフォルダパスも受け付け、
- * file:// のリンクに変換する。開けない形式なら null を返す。
- *   例) https://xxx.direct-cloud.jp/...        → そのまま
- *       C:\Users\yuta\DirectCloud\A案件      → file:///C:/Users/...
- *       \\server\share\A案件                  → file://server/share/...
+ * フォルダの指定を解釈する。
+ *   { kind: 'url',  href }  … ダイレクトクラウド等のURL。クリックで開く
+ *   { kind: 'path', path }  … Windowsのフォルダパス。ブラウザでは開けないのでコピーさせる
+ *   null                    … 開けない形式
+ *
+ * file:// のリンクはブラウザ内のフォルダ一覧が出るだけでエクスプローラーは開かないため、
+ * ローカルのパスは「開く」ではなく「コピーする」扱いにしている。
  */
-export function toFolderHref(value) {
+export function resolveFolderTarget(value) {
   const raw = typeof value === 'string' ? value.trim() : '';
   if (!raw) return null;
 
-  const encodePath = (path) =>
-    encodeURI(path.replace(/\\/g, '/')).replace(/#/g, '%23').replace(/\?/g, '%3F');
-
-  // UNC パス（\\サーバー名\共有名\...）
-  if (/^\\\\[^\\]/.test(raw)) return `file://${encodePath(raw.slice(2))}`;
-  // ドライブレター（C:\... / C:/...）
-  if (/^[A-Za-z]:[\\/]/.test(raw)) return `file:///${encodePath(raw)}`;
+  // UNC パス（\\サーバー名\共有名\...）とドライブレター（D:\... / D:/...）
+  if (/^\\\\[^\\]/.test(raw) || /^[A-Za-z]:[\\/]/.test(raw)) {
+    return { kind: 'path', path: raw };
+  }
 
   try {
     const { protocol } = new URL(raw);
-    if (protocol === 'http:' || protocol === 'https:' || protocol === 'file:') return raw;
+    if (BLOCKED_SCHEMES.has(protocol)) return null;
+    // file:// を直接書かれた場合も、パスとして扱う
+    if (protocol === 'file:') {
+      return { kind: 'path', path: raw };
+    }
+    // http/https のほか、専用アプリのリンク（xxx://）もそのまま開けるようにする
+    return { kind: 'url', href: raw };
   } catch {
     return null;
   }
-  return null;
 }
 
 /** このプロジェクトの工程一覧 */
