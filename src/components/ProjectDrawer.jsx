@@ -136,13 +136,13 @@ export default function ProjectDrawer({
           <label className="field">
             <span>
               プロジェクトのフォルダ
-              <span className="field__hint">ダイレクトクラウドのURL推奨（クリックで開けます）</span>
+              <span className="field__hint">URL または dcboxdrive:// ならクリックで開けます</span>
             </span>
             <input
               type="text"
               className="field__url"
               value={project.folderUrl}
-              placeholder="https://... または C:\Users\... / \\サーバー名\共有名\..."
+              placeholder="dcboxdrive://... / https://... / D:\共有\..."
               onChange={(e) => onUpdate(project.id, { folderUrl: e.target.value })}
             />
             {project.folderUrl && !resolveFolderTarget(project.folderUrl) && (
@@ -154,8 +154,8 @@ export default function ProjectDrawer({
               <p className="field__note">
                 フォルダのパスです。ブラウザからエクスプローラーは開けないため、
                 アイコンをクリックすると<b>パスをコピー</b>します（エクスプローラーのアドレス欄に貼り付け）。
-                クリックで直接開きたい場合は、ダイレクトクラウドで対象フォルダを開き、
-                アドレスバーの URL を貼り付けてください。
+                クリックで直接開きたい場合は、<b>dcboxdrive://</b> で始まるリンク
+                （ダイレクトクラウドのデスクトップアプリ用）を貼り付けてください。
               </p>
             )}
           </label>
