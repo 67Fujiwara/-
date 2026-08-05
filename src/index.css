@@ -1844,3 +1844,28 @@ button.linkchip {
   border-radius: 8px;
   padding: 6px 8px;
 }
+
+.field__note p {
+  margin: 0;
+}
+
+.field__note-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px !important;
+  flex-wrap: wrap;
+}
+
+.field__note-action .btn--sm {
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.field__note code {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 4px;
+  font-size: 10px;
+}

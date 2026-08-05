@@ -152,6 +152,16 @@ export function resolveFolderTarget(value) {
   }
 }
 
+/**
+ * Windows のフォルダパスを openfolder:// のリンクに変換する。
+ * tools/openfolder-protocol.reg を入れた PC では、これがクリックで開ける。
+ */
+export function toOpenFolderUrl(path) {
+  const raw = typeof path === 'string' ? path.trim() : '';
+  if (!/^[A-Za-z]:[\\/]/.test(raw)) return null;
+  return `openfolder://${raw.replace(/\\/g, '/')}`;
+}
+
 /** このプロジェクトの工程一覧 */
 export function departmentsOf(project) {
   return project?.departments || [];

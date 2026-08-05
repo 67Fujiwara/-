@@ -7,6 +7,7 @@ import {
   isSafeUrl,
   packAssignments,
   resolveFolderTarget,
+  toOpenFolderUrl,
   phaseProgress,
   projectProgress,
 } from '../lib/project.js';
@@ -151,12 +152,30 @@ export default function ProjectDrawer({
               </p>
             )}
             {resolveFolderTarget(project.folderUrl)?.kind === 'path' && (
-              <p className="field__note">
-                フォルダのパスです。ブラウザからエクスプローラーは開けないため、
-                アイコンをクリックすると<b>パスをコピー</b>します（エクスプローラーのアドレス欄に貼り付け）。
-                クリックで直接開きたい場合は、<b>dcboxdrive://</b> で始まるリンク
-                （ダイレクトクラウドのデスクトップアプリ用）を貼り付けてください。
-              </p>
+              <div className="field__note">
+                <p>
+                  フォルダのパスです。ブラウザからエクスプローラーは開けないため、
+                  アイコンをクリックすると<b>パスをコピー</b>します
+                  （エクスプローラーのアドレス欄に貼り付け）。
+                </p>
+                {toOpenFolderUrl(project.folderUrl) && (
+                  <p className="field__note-action">
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm"
+                      onClick={() =>
+                        onUpdate(project.id, { folderUrl: toOpenFolderUrl(project.folderUrl) })
+                      }
+                    >
+                      openfolder:// に変換
+                    </button>
+                    <span>
+                      1クリックで開けるようになります（各PCで
+                      <code>tools/openfolder-protocol.reg</code> の登録が必要）
+                    </span>
+                  </p>
+                )}
+              </div>
             )}
           </label>
           <label className="field">

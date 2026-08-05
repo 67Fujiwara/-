@@ -1,0 +1,25 @@
+Windows Registry Editor Version 5.00
+
+; Registers the "openfolder://" link so the project board can open a folder
+; in Explorer with a single click.
+;
+; Scope   : current user only (no administrator rights required)
+; Safety  : opens the path ONLY when it is an existing folder on a local drive
+;           (C:\ D:\ ...). Files are never executed and UNC paths (\\server\...)
+;           are rejected on purpose.
+;
+; Install : double-click this file and allow the change.
+; Remove  : run openfolder-protocol-uninstall.reg
+;
+; Example link: openfolder://D:/kyoyu/solution/A020076
+
+[HKEY_CURRENT_USER\Software\Classes\openfolder]
+@="URL:Open Folder Protocol"
+"URL Protocol"=""
+
+[HKEY_CURRENT_USER\Software\Classes\openfolder\shell]
+
+[HKEY_CURRENT_USER\Software\Classes\openfolder\shell\open]
+
+[HKEY_CURRENT_USER\Software\Classes\openfolder\shell\open\command]
+@="powershell -NoProfile -NonInteractive -WindowStyle Hidden -Command \"$p=[uri]::UnescapeDataString(('%1' -replace '^openfolder:/*','')) -replace '/','\\'; if($p -match '^[a-zA-Z]:\\\\' -and (Test-Path -LiteralPath $p -PathType Container)){explorer.exe $p.TrimEnd('\\')}\""
