@@ -78,7 +78,7 @@ export function normalizeProject(raw, fallbackDepartments = DEFAULT_DEPARTMENTS)
     note: raw?.note || '',
     launchDate: typeof raw?.launchDate === 'string' ? raw.launchDate : '',
     slackUrl: typeof raw?.slackUrl === 'string' ? raw.slackUrl : '',
-    folderUrl: typeof raw?.folderUrl === 'string' ? raw.folderUrl : '',
+    folderUrl: typeof raw?.folderUrl === 'string' ? normalizeFolderUrl(raw.folderUrl) : '',
     departments,
     phases,
     todos: Array.isArray(raw?.todos)
@@ -153,13 +153,28 @@ export function resolveFolderTarget(value) {
 }
 
 /**
- * Windows のフォルダパスを openfolder:// のリンクに変換する。
+ * Windows のフォルダパスを openfolder: のリンクに変換する。
  * tools/openfolder-protocol.reg を入れた PC では、これがクリックで開ける。
+ *
+ * `openfolder://D:/…` と書くとブラウザが「D:」をホスト名とみなし、
+ * ドライブレターのコロンを落として `openfolder://D/…` に書き換えてしまう。
+ * そのため `//` を付けず `openfolder:D:/…` の形にしている。
  */
 export function toOpenFolderUrl(path) {
   const raw = typeof path === 'string' ? path.trim() : '';
   if (!/^[A-Za-z]:[\\/]/.test(raw)) return null;
-  return `openfolder://${raw.replace(/\\/g, '/')}`;
+  return `openfolder:${raw.replace(/\\/g, '/')}`;
+}
+
+/**
+ * 旧形式（`openfolder://D:/…` / コロンが落ちた `openfolder://D/…`）を
+ * 現行の `openfolder:D:/…` に直す。保存データの読み込み時に通す。
+ */
+export function normalizeFolderUrl(value) {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  const m = /^openfolder:\/+([A-Za-z])(:?)([\\/].*)$/.exec(raw);
+  if (!m) return raw;
+  return `openfolder:${m[1]}:${m[3].replace(/\\/g, '/')}`;
 }
 
 /** このプロジェクトの工程一覧 */

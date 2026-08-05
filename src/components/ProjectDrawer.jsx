@@ -167,7 +167,7 @@ export default function ProjectDrawer({
                         onUpdate(project.id, { folderUrl: toOpenFolderUrl(project.folderUrl) })
                       }
                     >
-                      openfolder:// に変換
+                      1クリックで開ける形式に変換
                     </button>
                     <span>
                       1クリックで開けるようになります（各PCで

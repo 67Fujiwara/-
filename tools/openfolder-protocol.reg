@@ -11,7 +11,14 @@ Windows Registry Editor Version 5.00
 ; Install : double-click this file and allow the change.
 ; Remove  : run openfolder-protocol-uninstall.reg
 ;
-; Example link: openfolder://D:/kyoyu/solution/A020076
+; Link format: openfolder:D:/kyoyu/solution/A020076   (no "//" after the colon)
+;
+; Note: in the "openfolder://D:/..." form the browser drops the colon of the
+;       drive letter and passes "openfolder://D/...". The command below puts
+;       the colon back, so links made before this fix keep working.
+;
+; If the path cannot be opened, a small message box shows what was received,
+; which makes a wrong link easy to spot instead of failing silently.
 
 [HKEY_CURRENT_USER\Software\Classes\openfolder]
 @="URL:Open Folder Protocol"
@@ -22,4 +29,4 @@ Windows Registry Editor Version 5.00
 [HKEY_CURRENT_USER\Software\Classes\openfolder\shell\open]
 
 [HKEY_CURRENT_USER\Software\Classes\openfolder\shell\open\command]
-@="powershell -NoProfile -NonInteractive -WindowStyle Hidden -Command \"$p=[uri]::UnescapeDataString(('%1' -replace '^openfolder:/*','')) -replace '/','\\'; if($p -match '^[a-zA-Z]:\\\\' -and (Test-Path -LiteralPath $p -PathType Container)){explorer.exe $p.TrimEnd('\\')}\""
+@="powershell -NoProfile -NonInteractive -WindowStyle Hidden -Command \"$p=[uri]::UnescapeDataString(('%1' -replace '^openfolder:/*','')) -replace '/','\\'; if($p -match '^[a-zA-Z]\\\\'){$p=$p.Insert(1,':')}; if($p -match '^[a-zA-Z]:\\\\' -and (Test-Path -LiteralPath $p -PathType Container)){explorer.exe $p.TrimEnd('\\')}else{(New-Object -ComObject WScript.Shell).Popup('Cannot open this folder:' + [char]10 + $p,0,'Project Board',48)}\""
