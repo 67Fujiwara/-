@@ -4,6 +4,25 @@ import { normalizeProject } from './project.js';
 import { sampleProjects } from './sampleData.js';
 
 /**
+ * 起動した時点で保存データがあったか。
+ * 起動直後に saveProjects() がサンプルデータを書き込むので、
+ * この判定はモジュールの読み込み時（＝画面が動き出す前）に済ませておく。
+ * 自動バックアップが「サンプル表示中のデータ」で正しいバックアップを
+ * 上書きしてしまわないようにするために使う。
+ */
+const startedWithStoredData = (() => {
+  try {
+    return localStorage.getItem(STORAGE_KEY) !== null;
+  } catch {
+    return false;
+  }
+})();
+
+export function hadStoredDataAtStartup() {
+  return startedWithStoredData;
+}
+
+/**
  * 保存データを読み込む。工程はプロジェクトごとに持つ形式（v3）。
  * 旧形式も読み込める。
  *   v1: プロジェクトの配列だけ            → 既定の工程を各プロジェクトに複製

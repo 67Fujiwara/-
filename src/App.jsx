@@ -8,6 +8,7 @@ import ProjectDrawer from './components/ProjectDrawer.jsx';
 import CompletedPage from './components/CompletedPage.jsx';
 import DeptFilterMenu from './components/DeptFilterMenu.jsx';
 import DataTransfer from './components/DataTransfer.jsx';
+import BackupBar from './components/BackupBar.jsx';
 
 export default function App() {
   const {
@@ -159,6 +160,8 @@ export default function App() {
           </nav>
         </div>
       </header>
+
+      <BackupBar projects={projects} />
 
       {page === 'active' && (
         <div className="toolbar">
