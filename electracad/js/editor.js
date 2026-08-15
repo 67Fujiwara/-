@@ -211,11 +211,19 @@ function devicesSVG(page) {
     }
     out += extra;
     out += symBodySVG(sym, { strokeWidth: 1.15 * 0.42 }); // 画面上で約0.5mm相当
-    // 端子番号 (13/14, A1/A2, X1/X2 …) — EPLAN同様ピン脇に小さく表示
-    sym.pins.forEach(p => {
+    // 端子番号 (13/14, A1/A2, X1/X2 …) — EPLAN同様ピン脇に表示。
+    // 連動接点は同一コイル内の順位で 13/14 → 23/24 と自動採番。
+    // 隣接ワイヤの線番と同名 (主回路の U1 等) なら二重表示を抑制。
+    sym.pins.forEach((p, pi) => {
       if (!p.n || dev.sym === "terminal") return;
+      const name = effectivePinName(dev, pi);
+      if (!name) return;
+      const abs = pinAbs(dev, p);
+      const dupWire = page.wires.some(wr => wr.num === name &&
+        wr.pts.some(pt => Math.abs(pt[0] - abs.x) < .01 && Math.abs(pt[1] - abs.y) < .01));
+      if (dupWire) return;
       const isTop = p.y <= 0 || (sym.horizontalPins && p.y <= sym.bounds[1] + 2);
-      out += `<text x="${p.x + 1}" y="${p.y + (isTop ? 3.2 : -1.4)}" font-size="2.2" fill="#8a93a6" stroke="none" font-family="monospace">${escXML(p.n)}</text>`;
+      out += `<text x="${p.x + 1}" y="${p.y + (isTop ? 3.4 : -1.6)}" font-size="2.5" fill="#8a93a6" stroke="none" font-family="monospace">${escXML(name)}</text>`;
     });
     out += `</g>`;
     // タグ・機能テキスト (回転に追従させず水平表示)
@@ -251,6 +259,14 @@ function devLabelsSVG(dev, sym) {
   const b = devBounds(dev);
   const tag = displayTag(dev);
   let out = "";
+  const horizontal = (dev.rot || 0) % 180 !== 0;
+  if (horizontal) {
+    // 横向きデバイス: ラベルを上下に置く (横引きレールとの重なり防止)
+    const cx = b.x + b.w / 2;
+    if (tag) out += `<text x="${cx}" y="${b.y - 2}" font-size="3.6" text-anchor="middle" fill="${INK}" font-weight="600" font-family="monospace">${escXML(tag)}</text>`;
+    if (dev.desc) out += `<text x="${cx}" y="${b.y + b.h + 4}" font-size="2.8" text-anchor="middle" fill="${INK_SOFT}">${escXML(dev.desc)}</text>`;
+    return out;
+  }
   const labelX = b.x - 2.2, labelYc = b.y + b.h / 2;
   if (tag) {
     out += `<text x="${labelX}" y="${labelYc - 0.6}" font-size="3.6" text-anchor="end" fill="${INK}" font-weight="600" font-family="monospace">${escXML(tag)}</text>`;
@@ -284,7 +300,8 @@ function mirrorSVG(coilDev) {
   contacts.slice(0, MAXROWS).forEach((c, i) => {
     const cy = y0 + i * 4.2;
     const csym = SYMBOLS_BY_ID[c.sym];
-    const pinLabel = (csym.pins[0].n && csym.pins[1]) ? `${csym.pins[0].n}·${csym.pins[1].n}` : "";
+    const n0 = effectivePinName(c, 0), n1 = effectivePinName(c, 1);
+    const pinLabel = (n0 && n1) ? `${n0}·${n1}` : "";
     // ミニ接点グリフ (NC は横バーつき)
     if (csym.sim === "contact_nc") {
       out += `<path d="M${x},${cy + 1.5} h2 l2.6,-2.8 m-2.6,0 h2.6 m0,2.8 h0.8" stroke="${INK_SOFT}" stroke-width="0.35" fill="none"/>`;

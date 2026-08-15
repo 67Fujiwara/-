@@ -337,8 +337,11 @@ input, select, textarea { font-family: inherit; }
   text-align: left; padding: 6px 8px; color: var(--text-dim); font-weight: 600;
   border-bottom: 1px solid var(--line); font-size: 10.5px; letter-spacing: .04em;
 }
-.bom-table td { padding: 6px 8px; border-bottom: 1px solid var(--line-soft); }
+.bom-table { table-layout: fixed; }
+.bom-table th:last-child, .bom-table td:last-child { width: 26px; text-align: right; }
+.bom-table td { padding: 6px 8px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
 .bom-table td.mono { font-family: var(--mono); color: var(--accent-2); }
+.bom-table td.clip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bom-actions { display: flex; gap: 8px; margin-top: 12px; }
 
 /* ══════════════ ステータスバー ══════════════ */
@@ -436,8 +439,9 @@ input, select, textarea { font-family: inherit; }
   font-size: 11px; font-weight: 700; align-items: center; justify-content: center; padding: 0 5px;
 }
 .wiz-card.sel .wc-qty { display: inline-flex; }
-.wiz-qtyrow { display: none; align-items: center; gap: 6px; margin-top: 2px; }
-.wiz-card.sel .wiz-qtyrow { display: inline-flex; }
+/* 数量行は常にレイアウト領域を確保し、選択時だけ可視化 (グリッドの行高ジャンプ防止) */
+.wiz-qtyrow { display: inline-flex; visibility: hidden; align-items: center; gap: 6px; margin-top: 2px; }
+.wiz-card.sel .wiz-qtyrow { visibility: visible; }
 .wiz-qtyrow button {
   width: 20px; height: 20px; border-radius: 5px; background: var(--panel-3);
   border: 1px solid var(--line); font-size: 12px; line-height: 1;

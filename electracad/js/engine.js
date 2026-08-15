@@ -181,13 +181,15 @@ function conductivePairs(dev, mode = "closed") {
     case "breaker3":
       if (mode === "open") return [];
       return (mode === "sim" && dev.props.open) ? [] : [[0, 1], [2, 3], [4, 5]];
-    case "passthru": return sym.pins.length >= 2 ? [[0, 1]] : []; // 端子: 線番も通す
+    case "passthru":
+      // 端子: 線番も通す。"split" は端子表用に両側を分離
+      return mode === "split" ? [] : (sym.pins.length >= 2 ? [[0, 1]] : []);
     case "fuse":
       // ヒューズ: 導通するが線番は跨がない (実務では番号が変わる)
-      return mode === "open" ? [] : [[0, 1]];
+      return (mode === "open" || mode === "split") ? [] : [[0, 1]];
     case "passthru3":
       // サーマルリレー主回路: 導通するが線番は跨がない (2L1 → U1)
-      return mode === "open" ? [] : [[0, 1], [2, 3], [4, 5]];
+      return (mode === "open" || mode === "split") ? [] : [[0, 1], [2, 3], [4, 5]];
     default: return []; // coil / load / trafo(絶縁) / source は導通しない(消費・供給)
   }
 }
@@ -198,6 +200,50 @@ function linkPolarity(dev) {
   if (["+24V", "24V", "L+", "P24"].includes(t)) return "P";
   if (["0V", "M", "N", "-V", "GND"].includes(t)) return "N";
   return null;
+}
+
+/**
+ * ページ間電位リンクの伝播: 同じタグの電位リンクは全ページで同一電位。
+ * pagesData: [{ page, pinNet, pNets, nNets, acNets }]
+ * いずれかのページでリンクのネットが P/N/AC なら、同タグ全リンクのネットにも付与。
+ */
+function propagateLinkGroups(pagesData) {
+  const groups = new Map(); // tag → [{pd, net}]
+  pagesData.forEach(pd => {
+    pd.page.devices.forEach(dev => {
+      if (SYMBOLS_BY_ID[dev.sym].sim !== "link" || !dev.tag) return;
+      const net = pd.pinNet(dev, 0);
+      if (!net) return;
+      const key = dev.tag.replace(/^-/, "").toUpperCase();
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push({ pd, net });
+    });
+  });
+  for (let guard = 0; guard < 8; guard++) {
+    let moved = false;
+    groups.forEach(list => {
+      ["pNets", "nNets", "acNets"].forEach(kind => {
+        const hot = list.some(({ pd, net }) => pd[kind].has(net));
+        if (hot) list.forEach(({ pd, net }) => {
+          if (!pd[kind].has(net)) { pd[kind].add(net); moved = true; }
+        });
+      });
+    });
+    if (!moved) break;
+  }
+}
+
+/** 連動接点の実効端子番号: 同一コイル配下の n 番目の接点は 13/14 → n3/n4 に採番 */
+function effectivePinName(dev, idx) {
+  const sym = SYMBOLS_BY_ID[dev.sym];
+  const base = sym.pins[idx] ? sym.pins[idx].n : "";
+  if (!dev.linkTo || !/^[1-8][1-8]$/.test(base)) return base;
+  const f = findDevice(dev.linkTo);
+  if (!f) return base;
+  const siblings = linkedContacts(f.dev).filter(c => /^[1-8][1-8]$/.test((SYMBOLS_BY_ID[c.sym].pins[0] || {}).n || ""));
+  const pos = siblings.findIndex(c => c.id === dev.id);
+  if (pos < 0) return base;
+  return String(pos + 1) + base[1];
 }
 
 /**
@@ -351,7 +397,7 @@ function simActiveState(dev) {
  * コイル/負荷は両極にまたがれば励磁。ページを跨ぐ連動 (制御回路のコイル →
  * 主回路の接触器) はリンク接点の状態参照で成立する。
  */
-function simSolvePage(page) {
+function simCollectPage(page) {
   const { pinNet, wireNet } = computeNets(page, "sim");
   const pNets = new Set(), nNets = new Set(), acNets = new Set();
   page.devices.forEach(dev => {
@@ -362,7 +408,7 @@ function simSolvePage(page) {
       if (n0) nNets.add(n0);
     }
     if (sym.sim === "link") {
-      // 電位リンク: タグで極性を宣言 (PSUの無いページでも給電できる)
+      // 明示極性リンク (+24V/0V) はそのページの電源になる
       const pol = linkPolarity(dev);
       const net = pinNet(dev, 0);
       if (net && pol === "P") pNets.add(net);
@@ -372,34 +418,35 @@ function simSolvePage(page) {
       sym.pins.forEach((_, i) => { const net = pinNet(dev, i); if (net) acNets.add(net); });
     }
   });
-  let changed = false;
-  page.devices.forEach(dev => {
-    const sym = SYMBOLS_BY_ID[dev.sym];
-    let en = false;
-    if (sym.sim === "coil" || sym.sim === "load") {
-      const a = pinNet(dev, 0), b = pinNet(dev, 1);
-      en = (pNets.has(a) && nNets.has(b)) || (pNets.has(b) && nNets.has(a));
-    } else if (sym.sim === "load3") {
-      let hot = 0;
-      sym.pins.forEach((pin, i) => { if (pin.n !== "PE" && acNets.has(pinNet(dev, i))) hot++; });
-      en = hot >= 2;
-    }
-    if (sym.sim === "coil" || sym.sim === "load" || sym.sim === "load3") {
-      if (!!App.sim.states[dev.id] !== en) changed = true;
-      App.sim.states[dev.id] = en;
-    }
-  });
-  return { changed, energized: { pNets, nNets, acNets, wireNet, pinNet } };
+  return { page, pinNet, wireNet, pNets, nNets, acNets };
 }
 
 function simSolve() {
   for (let iter = 0; iter < 24; iter++) {
     let changed = false;
+    // 1) 全ページのネット + 電源を収集し、電位リンク(同タグ)でページ間伝播
+    const pagesData = App.project.pages.map(simCollectPage);
+    propagateLinkGroups(pagesData);
+    // 2) 励磁判定
     const byPage = new Map();
-    App.project.pages.forEach(page => {
-      const r = simSolvePage(page);
-      if (r.changed) changed = true;
-      byPage.set(page.id, r.energized);
+    pagesData.forEach(pd => {
+      pd.page.devices.forEach(dev => {
+        const sym = SYMBOLS_BY_ID[dev.sym];
+        let en = false;
+        if (sym.sim === "coil" || sym.sim === "load") {
+          const a = pd.pinNet(dev, 0), b = pd.pinNet(dev, 1);
+          en = (pd.pNets.has(a) && pd.nNets.has(b)) || (pd.pNets.has(b) && pd.nNets.has(a));
+        } else if (sym.sim === "load3") {
+          let hot = 0;
+          sym.pins.forEach((pin, i) => { if (pin.n !== "PE" && pd.acNets.has(pd.pinNet(dev, i))) hot++; });
+          en = hot >= 2;
+        }
+        if (sym.sim === "coil" || sym.sim === "load" || sym.sim === "load3") {
+          if (!!App.sim.states[dev.id] !== en) changed = true;
+          App.sim.states[dev.id] = en;
+        }
+      });
+      byPage.set(pd.page.id, { pNets: pd.pNets, nNets: pd.nNets, acNets: pd.acNets, wireNet: pd.wireNet, pinNet: pd.pinNet });
     });
     if (updateTimers()) changed = true;
     if (!changed) {
@@ -474,14 +521,25 @@ function drcSources(page, pinNet) {
   return { pNets, nNets };
 }
 
+function drcCollect(page, mode) {
+  const { pinNet, wireNet } = computeNets(page, mode);
+  const { pNets, nNets } = drcSources(page, pinNet);
+  return { page, pinNet, wireNet, pNets, nNets, acNets: new Set() };
+}
+
 function runDRC() {
   const issues = [];
   const tagSeen = new Map();
-  App.project.pages.forEach(page => {
-    const closed = computeNets(page, "closed");
-    const open = computeNets(page, "open");
-    const srcClosed = drcSources(page, closed.pinNet);
-    const srcOpen = drcSources(page, open.pinNet);
+  // 全ページのネットを先に解析し、電位リンク(同タグ)でページ間の電位を伝播させる
+  const closedData = App.project.pages.map(p => drcCollect(p, "closed"));
+  propagateLinkGroups(closedData);
+  const openData = App.project.pages.map(p => drcCollect(p, "open"));
+  propagateLinkGroups(openData);
+  App.project.pages.forEach((page, pageIdx) => {
+    const closed = closedData[pageIdx];
+    const open = openData[pageIdx];
+    const srcClosed = { pNets: closed.pNets, nNets: closed.nNets };
+    const srcOpen = { pNets: open.pNets, nNets: open.nNets };
 
     // ワイヤ端点集合 / 区間集合
     const wireEndpoints = new Map(); // key → count
@@ -528,8 +586,8 @@ function runDRC() {
           issues.push({ sev: "warn", msg: `${displayTag(dev) || sym.name} のピン ${pin.name || pin.idx + 1} が未接続です`, page: page.no, target: dev.id, loc: devLocation(dev) });
         }
       });
-      // タグ重複
-      if (dev.tag && !dev.linkTo) {
+      // タグ重複 (電位リンクは同タグで対にするのが仕様なので除外)
+      if (dev.tag && !dev.linkTo && sym.sim !== "link") {
         if (tagSeen.has(dev.tag)) {
           issues.push({ sev: "err", msg: `デバイスタグ ${dev.tag} が重複しています`, page: page.no, target: dev.id, loc: devLocation(dev) });
         } else tagSeen.set(dev.tag, dev.id);
@@ -617,7 +675,7 @@ function buildConnectionList() {
         const net = pinNet(dev, pin.idx);
         if (!net) return;
         if (!netPins.has(net)) netPins.set(net, []);
-        netPins.get(net).push(`${displayTag(dev) || SYMBOLS_BY_ID[dev.sym].name}:${pin.name || pin.idx + 1}`);
+        netPins.get(net).push(`${displayTag(dev) || SYMBOLS_BY_ID[dev.sym].name}:${effectivePinName(dev, pin.idx) || pin.idx + 1}`);
       });
     });
     netPins.forEach((pins, net) => {
@@ -632,16 +690,17 @@ function connectionCSV() {
     buildConnectionList().map(r => [r.page, esc(r.num), esc(r.pins.join(" ⇔ "))].join(",")).join("\n");
 }
 
-/** 端子表: 端子ごとの内部/外部接続 */
+/** 端子表: 端子ごとの内部/外部接続。
+    "split" モード (端子を開いた状態) で解析し、端子の両側を区別する */
 function buildTerminalList() {
   const rows = [];
   App.project.pages.forEach(page => {
-    const { pinNet, wireNet } = computeNets(page, "open");
+    const split = computeNets(page, "split");
     const netName = new Map();
-    page.wires.forEach(w => { if (w.num) netName.set(wireNet.get(w.id), w.num); });
+    page.wires.forEach(w => { if (w.num) netName.set(split.wireNet.get(w.id), w.num); });
     const pinsOfNet = new Map();
     page.devices.forEach(dev => devPins(dev).forEach(pin => {
-      const net = pinNet(dev, pin.idx);
+      const net = split.pinNet(dev, pin.idx);
       if (!net) return;
       if (!pinsOfNet.has(net)) pinsOfNet.set(net, []);
       pinsOfNet.get(net).push({ dev, pin });
@@ -649,9 +708,9 @@ function buildTerminalList() {
     page.devices.forEach(dev => {
       if (dev.sym !== "terminal") return;
       const side = i => {
-        const net = pinNet(dev, i);
+        const net = split.pinNet(dev, i);
         const others = (pinsOfNet.get(net) || []).filter(e => e.dev !== dev)
-          .map(e => `${displayTag(e.dev) || SYMBOLS_BY_ID[e.dev.sym].name}:${e.pin.name || e.pin.idx + 1}`);
+          .map(e => `${displayTag(e.dev) || SYMBOLS_BY_ID[e.dev.sym].name}:${effectivePinName(e.dev, e.pin.idx) || e.pin.idx + 1}`);
         return { num: netName.get(net) || "", others };
       };
       rows.push({ tag: dev.tag || "-X?", page: page.no, a: side(0), b: side(1) });

@@ -219,7 +219,7 @@ UI.mirrorHTML = (coilDev) => {
     <div class="xref-list">
       ${contacts.map(c => `<div class="xref-item" data-target="${c.id}">
         <span class="xr-tag">${SYMBOLS_BY_ID[c.sym].name}</span>
-        <span class="xr-loc">${devLocation(c)}</span>
+        <span class="xr-loc">/${devLocation(c)}</span>
       </div>`).join("")}
     </div>`;
 };
@@ -251,13 +251,13 @@ UI.runDRC = () => {
   const issues = runDRC();
   const nPages = App.project.pages.length;
   let html = `<div class="drc-run-row"><button class="btn-solid primary" id="drcRerun">再チェック</button></div>`;
-  html += `<div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">${DRC_RULES.length} ルール × ${nPages} ページを検査 — `;
+  html += `<div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;line-height:1.7">${DRC_RULES.length} ルール × ${nPages} ページを検査<br>`;
   if (!issues.length) {
-    html += `指摘なし</div>`;
+    html += `<span style="white-space:nowrap">指摘なし</span></div>`;
     html += `<div class="drc-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12.5l3 3 5-6"/></svg><br>問題は見つかりませんでした</div>`;
   } else {
     const errs = issues.filter(i => i.sev === "err").length;
-    html += `<b style="color:var(--err)">エラー ${errs}</b> ・ <b style="color:var(--warn)">警告 ${issues.length - errs}</b></div>`;
+    html += `<span style="white-space:nowrap"><b style="color:var(--err)">エラー ${errs}</b> ・ <b style="color:var(--warn)">警告 ${issues.length - errs}</b></span></div>`;
     issues.forEach((iss, i) => {
       const [pg, col] = String(iss.loc).split(".");
       html += `<div class="drc-item ${iss.sev}" data-i="${i}">
@@ -294,8 +294,8 @@ UI.showBOM = () => {
     <table class="bom-table">
       <thead><tr><th>デバイスタグ</th><th>名称</th><th>型式</th><th>数</th></tr></thead>
       <tbody>${rows.map(r => `<tr>
-        <td class="mono" title="${esc(r.tags.join(", "))}">${esc(r.tags.length > 3 ? r.tags.slice(0, 3).join(" ") + " …" : r.tags.join(" "))}</td>
-        <td>${esc(r.name)}</td><td class="mono">${esc(r.typeRef)}</td><td>${r.tags.length}</td></tr>`).join("")}</tbody>
+        <td class="mono clip" title="${esc(r.tags.join(", "))}">${esc(r.tags.length > 2 ? r.tags.slice(0, 2).join(" ") + "…" : r.tags.join(" "))}</td>
+        <td class="clip" title="${esc(r.name)}">${esc(r.name)}</td><td class="mono clip" title="${esc(r.typeRef)}">${esc(r.typeRef)}</td><td>${r.tags.length}</td></tr>`).join("")}</tbody>
     </table>
     ${plc.length ? `
     <div class="prop-sect" style="margin-top:16px">PLC アドレス一覧</div>

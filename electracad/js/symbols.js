@@ -151,8 +151,8 @@ const SYMBOLS = [
   },
   {
     id: "plc_do", cat: "logic", letter: "A", name: "PLC出力ポイント", nameEn: "PLC digital output",
-    desc: "DOカードの1点", typ: "PLC DO", pins: [{x:0,y:0,n:"Q"},{x:0,y:20,n:"COM"}],
-    sim: "contact_no", linked: true, bounds: [-10,0, 20, 20],
+    desc: "DOカードの1点 (シミュレーションではクリックでON/OFF)", typ: "PLC DO", pins: [{x:0,y:0,n:"Q"},{x:0,y:20,n:"COM"}],
+    sim: "contact_no", bounds: [-10,0, 20, 20],
     body: `<path d="M0,0 V4 M0,20 V16"/><rect x="-8" y="4" width="16" height="12"/><text x="0" y="12.7" font-size="5" text-anchor="middle" fill="currentColor" stroke="none" font-family="monospace">DO</text>`,
   },
 
@@ -251,9 +251,10 @@ const SYMBOLS = [
   },
   {
     id: "trafo", cat: "power", letter: "T", name: "変圧器", nameEn: "Transformer",
-    desc: "制御トランス (絶縁)", typ: "PT-100E", pins: [{x:0,y:0,n:"1"},{x:0,y:40,n:"2"}],
-    sim: "trafo", bounds: [-9,0, 18, 40],
-    body: `<path d="M0,0 V12 M0,40 V28"/><circle cx="0" cy="17" r="6"/><circle cx="0" cy="23" r="6"/>`,
+    desc: "制御トランス (絶縁・2巻線)", typ: "PT-100E", horizontalPins: true,
+    pins: [{x:-5,y:0,n:"1"},{x:5,y:0,n:"2"},{x:-5,y:40,n:"3"},{x:5,y:40,n:"4"}],
+    sim: "trafo", bounds: [-12,0, 24, 40],
+    body: `<path d="M-5,0 V14 M5,0 V14 M-5,40 V26 M5,40 V26"/><path d="M-5,14 A5,5 0 0 1 5,14" transform="translate(0,3)"/><path d="M-5,26 A5,5 0 0 0 5,26" transform="translate(0,-3)"/><path d="M-10,20 H10" stroke-dasharray="1.4 1.2"/>`,
   },
   {
     id: "earth", cat: "power", letter: "E", name: "接地 (PE)", nameEn: "Earth / PE",
