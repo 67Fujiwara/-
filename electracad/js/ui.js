@@ -53,8 +53,7 @@ UI.buildPalette = (filter = "") => {
       item.addEventListener("mousedown", e => {
         if (e.button !== 0) return;
         e.preventDefault();
-        startGhost(sym.id);
-        UI.setMsg(`${sym.name} — クリックで配置、右クリックでキャンセル`);
+        startGhost(sym.id); // 操作ガイドは startGhost 側で表示
       });
       item.addEventListener("dblclick", () => {
         startGhost(sym.id);
@@ -76,6 +75,7 @@ UI.buildPageTabs = () => {
     </div>`);
     el.addEventListener("click", e => {
       if (e.target.classList.contains("ptab-close")) {
+        if (App.sim.running) { UI.setMsg("シミュレーション中はページを削除できません"); return; }
         if (!confirm(`ページ「${pg.name}」を削除しますか？`)) return;
         commit();
         App.project.pages.splice(i, 1);
@@ -85,12 +85,14 @@ UI.buildPageTabs = () => {
         UI.refresh();
         return;
       }
+      if (i === App.pageIdx) return; // 同一タブ再クリックはDOMを保持 (ダブルクリックのリネームを生かす)
       App.pageIdx = i;
       App.selection.clear();
       UI.refresh();
     });
     el.addEventListener("dblclick", e => {
       if (e.target.classList.contains("ptab-close")) return;
+      if (App.sim.running) return;
       // インラインリネーム (prompt は使わない)
       const span = el.querySelector("span:nth-child(2)");
       const inp = h(`<input value="${pg.name.replace(/"/g, "&quot;")}" style="width:${Math.max(60, pg.name.length * 13)}px;background:var(--bg);border:1px solid var(--accent);border-radius:4px;color:var(--text);font-size:12px;padding:1px 6px;outline:none"/>`);
@@ -181,15 +183,8 @@ UI.showProps = (focusTag = false) => {
     pane.querySelectorAll(".xref-item").forEach(el => {
       el.addEventListener("click", () => UI.jumpToDevice(el.dataset.target));
     });
-  } else if (selDevs.length > 1 || selWires.length || selTexts.length) {
-    const total = selDevs.length + selWires.length + selTexts.length;
-    pane.innerHTML = `
-      <div class="prop-empty">
-        <div style="font-size:22px;font-weight:700;color:var(--text)">${total}</div>
-        個のオブジェクトを選択中<br><br>
-        デバイス ${selDevs.length} ・ 配線 ${selWires.length} ・ テキスト ${selTexts.length}
-      </div>`;
-  } else if (selWires.length === 1) {
+  } else if (selWires.length === 1 && selDevs.length === 0 && selTexts.length === 0) {
+    // 配線単体: 線番編集 (複数選択パネルより先に判定すること)
     const w = selWires[0];
     pane.innerHTML = `
       <div class="prop-head"><div class="prop-head-txt"><div class="t1">配線</div><div class="t2">${w.pts.length - 1} セグメント</div></div></div>
@@ -202,6 +197,23 @@ UI.showProps = (focusTag = false) => {
       w.numShow = !!v;
       UI.refresh(false);
     });
+  } else if (selTexts.length === 1 && selDevs.length === 0 && selWires.length === 0) {
+    // テキスト単体: 内容とサイズ
+    const t = selTexts[0];
+    pane.innerHTML = `
+      <div class="prop-head"><div class="prop-head-txt"><div class="t1">テキスト</div><div class="t2">図面注記</div></div></div>
+      <div class="prop-row"><label>内容</label><input id="pTxt" value="${(t.text || "").replace(/"/g, "&quot;")}"/></div>
+      <div class="prop-row"><label>文字高 (mm)</label><input id="pTsz" class="mono" type="number" step="0.5" min="2" value="${t.size || 4}"/></div>`;
+    pane.querySelector("#pTxt").addEventListener("change", e => { commit(); t.text = e.target.value; UI.refresh(false); });
+    pane.querySelector("#pTsz").addEventListener("change", e => { commit(); const n = parseFloat(e.target.value); if (!isNaN(n)) t.size = Math.max(2, n); UI.refresh(false); });
+  } else if (selDevs.length + selWires.length + selTexts.length > 1) {
+    const total = selDevs.length + selWires.length + selTexts.length;
+    pane.innerHTML = `
+      <div class="prop-empty">
+        <div style="font-size:22px;font-weight:700;color:var(--text)">${total}</div>
+        個のオブジェクトを選択中<br><br>
+        デバイス ${selDevs.length} ・ 配線 ${selWires.length} ・ テキスト ${selTexts.length}
+      </div>`;
   } else {
     pane.innerHTML = `
       <div class="prop-empty">
@@ -347,7 +359,10 @@ const MENUS = {
   ],
   view: [
     { label: "全体表示", key: "F", fn: zoomFit },
-    { label: "100%", key: "", fn: () => { Editor.view.s = 2.2; requestRender(); updateZoomLabel(); } },
+    { label: "100%", key: "", fn: () => {
+      const r = Editor.svg.getBoundingClientRect();
+      zoomAt(r.left + r.width / 2, r.top + r.height / 2, 2.2 / Editor.view.s);
+    } },
     { label: "拡大", key: "+", fn: () => UI.zoomCenter(1.25) },
     { label: "縮小", key: "−", fn: () => UI.zoomCenter(0.8) },
   ],
@@ -465,6 +480,7 @@ UI.addPage = () => {
   UI.refresh();
 };
 UI.newProject = () => {
+  if (App.sim.running) UI.toggleSim();
   if (!confirm("現在のプロジェクトを破棄して新規作成しますか？\n(ブラウザ保存済みデータも上書きされます)")) return;
   App.project = newProject();
   App.pageIdx = 0;
@@ -476,6 +492,7 @@ UI.newProject = () => {
   zoomFit();
 };
 UI.openFile = () => {
+  if (App.sim.running) UI.toggleSim();
   const inp = document.createElement("input");
   inp.type = "file";
   inp.accept = ".json,.ecad.json";
@@ -502,6 +519,7 @@ UI.openFile = () => {
   inp.click();
 };
 UI.selectAll = () => {
+  if (App.sim.running) return;
   const page = curPage();
   App.selection.clear();
   page.devices.forEach(d => App.selection.add(d.id));
@@ -579,10 +597,12 @@ UI.openModal = ({ title, sub = "", body, foot = "", onclose = null, wide = false
 UI.showShortcuts = () => {
   const rows = [
     ["V / Esc", "選択ツール"], ["W", "配線ツール"], ["H / Space", "パン"], ["T", "テキスト"],
-    ["R", "回転"], ["Del", "削除"], ["F", "全体表示"], ["+ / −", "ズーム"],
-    ["Ctrl+Z / Y", "元に戻す / やり直し"], ["Ctrl+C / V", "コピー / 貼り付け"],
+    ["R", "回転 (配置プレビュー中も可)"], ["Del", "削除"], ["F", "全体表示"], ["+ / −", "ズーム"],
+    ["Ctrl+Z / Y", "元に戻す / やり直し"], ["Ctrl+C / V", "コピー / カーソル位置に貼り付け"],
     ["Ctrl+A", "すべて選択"], ["Ctrl+S", "保存"], ["F2", "AI自動作図"], ["F5", "シミュレーション"],
     ["矢印キー", "選択を5mm移動"], ["ホイール", "ズーム"], ["中ボタンドラッグ", "パン"],
+    ["Enter / ダブルクリック", "配線を確定"], ["Backspace", "配線作図中: 1頂点戻る"],
+    ["右→左ドラッグ", "交差選択 (触れたものを選択)"], ["左→右ドラッグ", "窓選択 (完全に囲んだものを選択)"],
   ];
   const body = h(`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 26px">
     ${rows.map(([k, d]) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line-soft)">
@@ -607,6 +627,7 @@ UI.showQuickstart = () => {
 
 /* ══════════════ AI 自動作図ウィザード ══════════════ */
 UI.openWizard = () => {
+  if (App.sim.running) { UI.setMsg("シミュレーション中はAI自動作図を実行できません (Escで終了)"); return; }
   const state = {
     step: 0,
     inputs: new Map(), logics: new Map(), outputs: new Map(),
@@ -816,7 +837,7 @@ UI.setupKeys = () => {
         break;
       case "Escape":
         if (App.sim.running) { UI.toggleSim(); return; }
-        UI.closeDropdown();
+        if (document.querySelector(".dropdown")) { UI.closeDropdown(); return; } // メニューだけ閉じる
         if (Editor.wireDraft) { cancelDraft(); return; } // 1段階目: 作図キャンセル (ツール維持)
         if (Editor.ghost) { cancelDraft(); UI.setTool("select"); return; }
         App.selection.clear(); UI.showProps(); requestRender();
@@ -858,11 +879,13 @@ UI.refresh = (rebuildTabs = true) => {
 function boot() {
   App.project = loadLocal() || demoProject();
   document.getElementById("projectName").value = App.project.name;
-  document.getElementById("projectName").addEventListener("change", e => {
+  const pn = document.getElementById("projectName");
+  pn.addEventListener("change", e => {
     App.project.name = e.target.value.trim() || "無題プロジェクト";
     saveLocal();
     requestRender();
   });
+  pn.addEventListener("keydown", e => { if (e.key === "Enter") pn.blur(); });
 
   setupEditor();
   UI.buildPalette();
@@ -915,15 +938,13 @@ function boot() {
 function demoProject() {
   App.project = newProject("サンプル — コンベア制御盤");
   try {
+    // 空の初期ページは aiGenerate が自動除去する
     aiGenerate({
       inputs: [{ id: "estop", qty: 1 }, { id: "pb_no", qty: 1 }, { id: "pb_nc", qty: 1 }, { id: "prox", qty: 1 }],
       logics: [{ id: "coil", qty: 1 }, { id: "cont_coil", qty: 1 }],
       outputs: [{ id: "lamp", qty: 1 }, { id: "motor3", qty: 1 }],
       opts: { selfHold: true, lampFb: false, autoNum: true },
     });
-    // デモでは生成ページのみ残す
-    App.project.pages.shift();
-    App.project.pages.forEach((p, i) => p.no = i + 1);
   } catch (e) {
     console.error("demo generation failed", e);
   }

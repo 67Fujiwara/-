@@ -48,6 +48,9 @@ function aiGenerate(sel) {
   const report = [];
   const L = AI_L;
   const project = App.project;
+  // 生成前が「空のページ1枚だけ」なら、生成後にその空ページを取り除く
+  const removeEmptyFirst = project.pages.length === 1 &&
+    !project.pages[0].devices.length && !project.pages[0].wires.length && !project.pages[0].texts.length;
 
   const inputs = aiExpand(sel.inputs);
   const logics = aiExpand(sel.logics);
@@ -128,40 +131,49 @@ function aiGenerate(sel) {
     project.pages.push(page);
     pageIdxs.push(project.pages.length - 1);
     let ctrlRailY = L.topRailY;
+    let ctrlStartX = 45;
+    let inLinks = [];
     if (first) {
-      // 電源ユニット + AC引込
+      // 電源ユニット + AC引込 (L相に一次側保護ヒューズ)
       addDevice(page, "psu24", L.psuX, L.psuY, { desc: "制御電源" });
-      const s1 = addWire(page, [[L.psuX - 10, L.psuY - 10], [L.psuX - 10, L.psuY]]);
+      addDevice(page, "fuse", L.psuX - 10, 22, { rot: 90, desc: "" }); // pins (45,22),(25,22)
+      const s1 = addWire(page, [[15, 22], [L.psuX - 30, 22]]);
+      addWire(page, [[L.psuX - 10, 22], [L.psuX - 10, L.psuY]]);
       const s2 = addWire(page, [[L.psuX + 10, L.psuY - 10], [L.psuX + 10, L.psuY]]);
       if (s1) s1.stub = true;
       if (s2) s2.stub = true;
-      page.texts.push({ id: uid("t"), x: L.psuX - 10, y: L.psuY - 13, text: "L", size: 3.4 });
+      page.texts.push({ id: uid("t"), x: 12, y: 24, text: "L", size: 3.4 });
       page.texts.push({ id: uid("t"), x: L.psuX + 10, y: L.psuY - 13, text: "N", size: 3.4 });
-      page.texts.push({ id: uid("t"), x: L.psuX, y: L.psuY - 16.5, text: "AC100V", size: 3.6 });
-      // 24V 分岐保護 (サーキットプロテクタ) を +24V レール横引きに挿入
-      addWire(page, [[L.psuX - 10, L.psuY + 30], [L.psuX - 10, L.topRailY], [L.psuX, L.topRailY]]);
-      addDevice(page, "fuse", L.psuX + 20, L.topRailY, { rot: 90, desc: "" });
-      // 安全チェーン
+      page.texts.push({ id: uid("t"), x: L.psuX + 13, y: 15, text: "AC100V", size: 3.6, anchor: "start" });
+      // 24V 分岐保護を +24V レール横引きに挿入 (0V縦引き x=psuX+10 を跨がない位置)
+      addWire(page, [[L.psuX - 10, L.psuY + 30], [L.psuX - 10, L.topRailY], [L.psuX + 15, L.topRailY]]);
+      addDevice(page, "fuse", L.psuX + 35, L.topRailY, { rot: 90, desc: "" }); // pins (90,65),(70,65)
+      ctrlStartX = L.psuX + 35;
+      // 安全チェーン (横型: 何点あっても縦スペースを消費しない)
       if (safeties.length) {
-        let y = L.topRailY + 15;
-        addWire(page, [[L.safetyX, L.topRailY], [L.safetyX, y]]);
+        const chainY = L.topRailY + 25;
+        addWire(page, [[L.safetyX, L.topRailY], [L.safetyX, chainY]]);
+        let sx = L.safetyX;
         safeties.forEach(id => {
-          addDevice(page, id, L.safetyX, y, { desc: id === "estop" ? "非常停止" : "温度異常" });
-          y += 20;
+          addDevice(page, id, sx, chainY, { rot: 270, desc: id === "estop" ? "非常停止" : "温度異常" });
+          sx += 20;
         });
-        ctrlRailY = y + 15;
-        addWire(page, [[L.safetyX, y], [L.safetyX, ctrlRailY]]);
-        page.texts.push({ id: uid("t"), x: L.safetyX + 14, y: ctrlRailY - 3, text: "安全回路", size: 3.4 });
+        ctrlRailY = chainY + 25;
+        addWire(page, [[sx, chainY], [sx, ctrlRailY]]);
+        page.texts.push({ id: uid("t"), x: L.safetyX, y: ctrlRailY + 5, text: "安全回路", size: 3.4, anchor: "start" });
+        ctrlStartX = sx;
       }
     } else {
       // 継続ページ: 電位リンクで受電
-      addDevice(page, "link", 45, L.topRailY, { tag: ctrlTag, desc: "" });
-      addDevice(page, "link", 45, L.botRailY, { tag: "0V", desc: "" });
+      inLinks = [
+        addDevice(page, "link", 45, L.topRailY, { tag: ctrlTag, desc: "" }),
+        addDevice(page, "link", 45, L.botRailY, { tag: "0V", desc: "" }),
+      ];
     }
     cur = {
-      page, first, ctrlRailY,
-      xCursor: first ? L.rungX0 : L.contX0,
-      prevRightAbs: first ? L.safetyX + 10 : 55,
+      page, first, ctrlRailY, ctrlStartX, inLinks, outLinks: [], endX: 0,
+      xCursor: first ? Math.max(L.rungX0, ctrlStartX + 30) : L.contX0,
+      prevRightAbs: first ? ctrlStartX + 5 : 55,
     };
     sheets.push(cur);
     return cur;
@@ -170,22 +182,21 @@ function aiGenerate(sel) {
   function closeSheet(sheet, hasNext) {
     const pg = sheet.page;
     const endX = Math.min(400, Math.max(sheet.prevRightAbs + 20, sheet.first ? 200 : 140));
+    sheet.endX = endX;
     if (sheet.first) {
-      // +24V レール: ヒューズ(85)以降。安全チェーンがあれば安全ドロップ(95)まで、
-      // なければ全幅がコントロールレール
-      const railStartX = L.psuX + 20;
       if (safeties.length) {
-        const w1 = addWire(pg, [[railStartX, L.topRailY], [Math.max(L.safetyX + 10, railStartX + 20), L.topRailY]]);
+        // +24V レール: DCヒューズ以降、安全チェーンのドロップまで
+        const w1 = addWire(pg, [[L.psuX + 35, L.topRailY], [Math.max(L.safetyX + 10, L.psuX + 55), L.topRailY]]);
         if (w1) w1.stub = true;
-        const wc = addWire(pg, [[L.safetyX, sheet.ctrlRailY], [endX, sheet.ctrlRailY]]);
+        const wc = addWire(pg, [[sheet.ctrlStartX, sheet.ctrlRailY], [endX, sheet.ctrlRailY]]);
         if (wc && !hasNext) wc.stub = true;
       } else {
-        const wc = addWire(pg, [[railStartX, L.topRailY], [endX, L.topRailY]]);
+        const wc = addWire(pg, [[L.psuX + 35, L.topRailY], [endX, L.topRailY]]);
         if (wc && !hasNext) wc.stub = true;
       }
       const wn = addWire(pg, [[L.psuX + 10, L.psuY + 30], [L.psuX + 10, L.botRailY], [endX, L.botRailY]]);
       if (wn && !hasNext) wn.stub = true;
-      pg.texts.push({ id: uid("t"), x: L.psuX - 22, y: L.topRailY - 3, text: "+24V", size: 4.2 });
+      pg.texts.push({ id: uid("t"), x: L.psuX - 24, y: L.topRailY - 3, text: "+24V", size: 4.2 });
       pg.texts.push({ id: uid("t"), x: L.psuX + 24, y: L.botRailY - 3, text: "0V", size: 4.2 });
     } else {
       const wc = addWire(pg, [[45, sheet.ctrlRailY], [endX, sheet.ctrlRailY]]);
@@ -194,9 +205,11 @@ function aiGenerate(sel) {
       if (wn && !hasNext) wn.stub = true;
     }
     if (hasNext) {
-      // 右端に送り側の電位リンク (0V側は最終ラングの機能テキストと重なるため注記なし)
-      addDevice(pg, "link", endX, sheet.ctrlRailY, { tag: ctrlTag, desc: "次ページへ" });
-      addDevice(pg, "link", endX, L.botRailY, { tag: "0V", desc: "" });
+      // 右端に送り側の電位リンク (行先参照は全シート確定後に付与)
+      sheet.outLinks = [
+        addDevice(pg, "link", endX, sheet.ctrlRailY, { tag: ctrlTag, desc: "" }),
+        addDevice(pg, "link", endX, L.botRailY, { tag: "0V", desc: "" }),
+      ];
     }
   }
 
@@ -235,8 +248,15 @@ function aiGenerate(sel) {
     if (nSlots * 30 > avail) pitch = 25;
     if (nSlots * 25 > avail) pitch = 20;
     while (nSlots * pitch > avail && els.length > (startGroup.length ? 0 : 1)) {
-      const dropped = els.pop();
-      overflowNotes.push(dropped.id);
+      // 端子以外を落とすことは許さない: 発注機器の無音欠落は検図エラーに直結させる
+      const dropIdx = els.findIndex(e => e.id === "terminal");
+      const dropped = dropIdx >= 0 ? els.splice(dropIdx, 1)[0] : els.pop();
+      if (dropped.id !== "terminal") {
+        const nm = SYMBOLS_BY_ID[dropped.id] ? SYMBOLS_BY_ID[dropped.id].name : dropped.id;
+        overflowNotes.push(nm);
+        page.genWarnings = page.genWarnings || [];
+        page.genWarnings.push(`スペース不足のため ${nm} を配置できませんでした — 手動で追加してください`);
+      }
       nSlots--;
     }
     const leftNeed = Math.max(20, ...els.map(e => symExtents(e.id).left + 14),
@@ -323,17 +343,42 @@ function aiGenerate(sel) {
     report.push(`PLC入出力を自動割付 (入力 ${di} 点 / 出力 ${qo} 点)`);
   } else {
     const funcNames = { coil: "制御リレー", cont_coil: "モータ運転", timer_on: "遅延制御", timer_off: "遅延復帰", safety_relay: "安全リレー" };
+    /** リレー系コイルのラングを1本生成し、自己保持・予算を登録する共通処理 */
+    function makeCoilRung(symId, series, startGroup, descOverride) {
+      const body = buildRung({
+        series, startGroup,
+        body: { id: symId, desc: descOverride || funcNames[symId] || "" },
+        funcText: descOverride || funcNames[symId] || "",
+      });
+      regCoil(body);
+      let hadSelfHold = false;
+      App.project.pages.forEach(pg => pg.devices.forEach(d => {
+        if (d.linkTo === "__self__") { d.linkTo = body.id; hadSelfHold = true; }
+      }));
+      if (hadSelfHold) takeContact(body.id);
+      coils.push(body);
+      return body;
+    }
     coilSyms.forEach(symId => {
-      const series = [];
+      let series = [];
       if (stopQueue.length) series.push({ id: stopQueue.shift(), desc: "停止" });
       if (condQueue.length) {
         const cid = condQueue.shift();
         series.push({ id: cid, desc: inputDescs[cid] || "条件" });
       }
-      const startGroup = [];
+      let startGroup = [];
       if (startQueue.length) startGroup.push({ id: startQueue.shift() });
       startGroup.forEach(el => el.desc = inputDescs[el.id] || "起動");
       if (opts.selfHold && startGroup.length) startGroup.push({ id: "aux_no", tag: "", linkTo: "__self__", desc: "" });
+      // タイマ/接触器は現場入力を直接受けない: 制御リレーを先に立てて吸収する
+      // (H3Y-2 に存在しない瞬時接点での自己保持や、接触器コイルのスロット超過を防ぐ)
+      const isAbsorberTarget = ["timer_on", "timer_off", "cont_coil"].includes(symId);
+      if (isAbsorberTarget && (series.length || startGroup.length)) {
+        const abs = makeCoilRung("coil", series, startGroup, "制御リレー");
+        report.push(`${funcNames[symId]} の入力受けに制御リレー ${abs.tag} を自動追加 (実装接点仕様を守るため)`);
+        series = [];
+        startGroup = [];
+      }
       // 入力が何もないコイル → 前段コイルの接点でカスケード駆動 (接点残数を消費)
       if (!series.length && !startGroup.length && coils.length) {
         const drv = allocDriveCoil(coils.length - 1);
@@ -343,18 +388,9 @@ function aiGenerate(sel) {
         series.push({ id: "ol_nc", tag: "", linkTo: `__ol${contIdx}__`, desc: "過負荷" });
         contIdx++;
       }
-      const body = buildRung({
-        series, startGroup,
-        body: { id: symId, desc: funcNames[symId] || "" },
-        funcText: funcNames[symId] || "",
-      });
-      regCoil(body);
-      let hadSelfHold = false;
-      body && App.project.pages.forEach(pg => pg.devices.forEach(d => {
-        if (d.linkTo === "__self__") { d.linkTo = body.id; hadSelfHold = true; }
-      }));
-      if (hadSelfHold) takeContact(body.id);
-      coils.push(body);
+      const body = makeCoilRung(symId, series, startGroup);
+      // 接触器は主回路の主接点で1点消費する分を予約
+      if (symId === "cont_coil" && motors3.length) takeContact(body.id);
     });
     let extra = 0;
     while (startQueue.length || condQueue.length) {
@@ -367,6 +403,22 @@ function aiGenerate(sel) {
       coils.push(body); extra++;
     }
     if (extra) report.push(`未割付の入力 ${extra} 点に中継リレーを自動追加`);
+
+    // ── 接点需要の事前計画: 足りなければ増設リレーを先に立てる ──
+    const baseCoils = [...coils];
+    if (coils.length) {
+      const demand = ctrlOutputs.length + (opts.lampFb ? baseCoils.length : 0);
+      let supply = [...contactBudget.values()].reduce((a, b) => a + b, 0);
+      let added = 0;
+      while (demand > supply && added < 4) {
+        const drv = allocDriveCoil(coils.length - 1);
+        if (!drv) break;
+        makeCoilRung("coil", [{ id: driveContactFor(drv), tag: "", linkTo: drv.id, desc: "" }], [], "接点増設");
+        added++;
+        supply = [...contactBudget.values()].reduce((a, b) => a + b, 0);
+      }
+      if (added) report.push(`接点需要が実装数を超えるため増設リレーを ${added} 台自動追加`);
+    }
 
     // ── 出力段 (接点残数を考慮してカスケード末尾側から駆動) ──
     const outNames = { lamp: "運転表示", buzzer: "警報", sol_valve: "バルブ開閉", heater: "加熱", motor1: "モータ運転" };
@@ -382,11 +434,15 @@ function aiGenerate(sel) {
             body: { id, h: bodyH }, funcText: outNames[id] || "",
           });
         } else {
+          // 全コイルの接点が枯渇: 超過リンクはせず、DRCで必ず可視化される警告として残す
           starved++;
+          const last = coils[coils.length - 1];
           buildRung({
-            series: [{ id: driveContactFor(coils[coils.length - 1]), tag: "", linkTo: coils[coils.length - 1].id }],
+            series: [{ id: driveContactFor(last), tag: "", linkTo: last.id }],
             body: { id, h: bodyH }, funcText: outNames[id] || "",
           });
+          cur.page.genWarnings = cur.page.genWarnings || [];
+          cur.page.genWarnings.push(`${SYMBOLS_BY_ID[id].name} の駆動接点が ${last.tag} の実装可能数を超えています — リレー型式の見直しが必要`);
         }
       } else {
         const drv = starts.length ? starts[i % starts.length] : (conditions[i % Math.max(1, conditions.length)] || null);
@@ -401,7 +457,7 @@ function aiGenerate(sel) {
 
     if (opts.lampFb) {
       let added = 0, skipped = 0;
-      coils.forEach(coil => {
+      baseCoils.forEach(coil => {
         if (!takeContact(coil.id)) { skipped++; return; }
         buildRung({
           series: [{ id: driveContactFor(coil), tag: "", linkTo: coil.id }],
@@ -416,8 +472,13 @@ function aiGenerate(sel) {
   if (overflowNotes.length) report.push(`スペース不足のため直列要素 ${overflowNotes.length} 点を省略しました (手動で追加してください)`);
   if (useTerm && termN > 1) report.push(`現場機器との境界に端子 -X1:1〜${termN - 1} を自動挿入`);
 
-  // ── 各シートのレールを引く ──
+  // ── 各シートのレールを引き、電位リンクに行先クロスリファレンスを付与 ──
   sheets.forEach((s, i) => closeSheet(s, i < sheets.length - 1));
+  for (let i = 0; i < sheets.length - 1; i++) {
+    const from = sheets[i], to = sheets[i + 1];
+    from.outLinks.forEach(d => d.desc = `/${to.page.no}.0`);
+    to.inLinks.forEach(d => d.desc = `/${from.page.no}.${sheetCol(from.endX)}`);
+  }
   if (sheets.length > 1) report.push(`図枠に収まらないため制御回路を ${sheets.length} ページに自動分割 (電位リンク ${ctrlTag}/0V で接続)`);
 
   // ── 主回路ページ (三相モータ) ──
@@ -458,6 +519,11 @@ function aiGenerate(sel) {
   }
 
   // ── 仕上げ ──
+  if (removeEmptyFirst) {
+    project.pages.shift();
+    project.pages.forEach((p, i) => p.no = i + 1);
+    for (let i = 0; i < pageIdxs.length; i++) pageIdxs[i]--;
+  }
   if (opts.autoNum !== false) {
     autoNumberWires();
     report.push("配線番号を自動付与 (接点を跨がない区間採番・主回路は相名)");

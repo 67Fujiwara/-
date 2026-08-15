@@ -166,20 +166,20 @@ function conductivePairs(dev, mode = "closed") {
   const sym = SYMBOLS_BY_ID[dev.sym];
   switch (sym.sim) {
     case "contact_no":
-      if (mode === "open") return [];
+      if (mode === "open" || mode === "split") return [];
       return (mode === "sim" ? simActiveState(dev) : true) ? [[0, 1]] : [];
     case "contact_nc":
-      if (mode === "open") return [];
+      if (mode === "open" || mode === "split") return [];
       if (mode === "sim") return simActiveState(dev) ? [] : [[0, 1]];
       return [[0, 1]];
     case "contact3_no":
-      if (mode === "open") return [];
+      if (mode === "open" || mode === "split") return [];
       return (mode === "sim" ? simActiveState(dev) : true) ? [[0, 1], [2, 3], [4, 5]] : [];
     case "breaker":
-      if (mode === "open") return [];
+      if (mode === "open" || mode === "split") return [];
       return (mode === "sim" && dev.props.open) ? [] : [[0, 1]];
     case "breaker3":
-      if (mode === "open") return [];
+      if (mode === "open" || mode === "split") return [];
       return (mode === "sim" && dev.props.open) ? [] : [[0, 1], [2, 3], [4, 5]];
     case "passthru":
       // 端子: 線番も通す。"split" は端子表用に両側を分離
@@ -504,6 +504,7 @@ function simStop() {
 const DRC_RULES = [
   "未接続ピン", "宙吊り配線端点", "デバイスタグ重複", "コイル未リンク接点",
   "接点なしコイル", "接点数超過", "電源未到達負荷", "無開閉直結コイル", "電源短絡",
+  "自動生成時の警告",
 ];
 
 function drcSources(page, pinNet) {
@@ -551,6 +552,11 @@ function runDRC() {
     page.wires.forEach(w => { for (let i = 0; i < w.pts.length - 1; i++) wireSegs.push([w.pts[i], w.pts[i + 1], w.id]); });
     const allPins = [];
     page.devices.forEach(d => devPins(d).forEach(p => allPins.push(p)));
+
+    // 自動生成時に配置できなかった要素 (無音の機器欠落を検図で必ず可視化する)
+    (page.genWarnings || []).forEach(msg => {
+      issues.push({ sev: "err", msg: `自動生成: ${msg}`, page: page.no, target: null, loc: `${page.no}.-` });
+    });
 
     // 電源短絡 (+24V と 0V が閉状態で同一ネット)
     for (const p of srcClosed.pNets) {
@@ -675,11 +681,13 @@ function buildConnectionList() {
         const net = pinNet(dev, pin.idx);
         if (!net) return;
         if (!netPins.has(net)) netPins.set(net, []);
-        netPins.get(net).push(`${displayTag(dev) || SYMBOLS_BY_ID[dev.sym].name}:${effectivePinName(dev, pin.idx) || pin.idx + 1}`);
+        netPins.get(net).push(dev.sym === "terminal"
+          ? (dev.tag || "-X?")
+          : `${displayTag(dev) || SYMBOLS_BY_ID[dev.sym].name}:${effectivePinName(dev, pin.idx) || pin.idx + 1}`);
       });
     });
     netPins.forEach((pins, net) => {
-      if (pins.length >= 2) rows.push({ page: page.no, num: netName.get(net) || "—", pins });
+      if (pins.length >= 2) rows.push({ page: page.no, num: netName.get(net) || "(直結)", pins });
     });
   });
   return rows.sort((a, b) => a.page - b.page || String(a.num).localeCompare(String(b.num), undefined, { numeric: true }));
@@ -705,23 +713,33 @@ function buildTerminalList() {
       if (!pinsOfNet.has(net)) pinsOfNet.set(net, []);
       pinsOfNet.get(net).push({ dev, pin });
     }));
+    const pinLabel = (d, idx) => d.sym === "terminal"
+      ? (d.tag || "-X?")
+      : `${displayTag(d) || SYMBOLS_BY_ID[d.sym].name}:${effectivePinName(d, idx) || idx + 1}`;
     page.devices.forEach(dev => {
       if (dev.sym !== "terminal") return;
       const side = i => {
         const net = split.pinNet(dev, i);
         const others = (pinsOfNet.get(net) || []).filter(e => e.dev !== dev)
-          .map(e => `${displayTag(e.dev) || SYMBOLS_BY_ID[e.dev.sym].name}:${effectivePinName(e.dev, e.pin.idx) || e.pin.idx + 1}`);
-        return { num: netName.get(net) || "", others };
+          .map(e => pinLabel(e.dev, e.pin.idx));
+        return { num: netName.get(net) || "(直結)", others };
       };
-      rows.push({ tag: dev.tag || "-X?", page: page.no, a: side(0), b: side(1) });
+      const s0 = side(0), s1 = side(1);
+      // 接続点の少ない側 = 現場機器側 (外部)、多い側 = 盤内 (内部) と判定
+      const ext = s0.others.length <= s1.others.length ? s0 : s1;
+      const int_ = ext === s0 ? s1 : s0;
+      rows.push({ tag: dev.tag || "-X?", page: page.no, int: int_, ext });
     });
   });
   return rows.sort((a, b) => String(a.tag).localeCompare(String(b.tag), undefined, { numeric: true }));
 }
 function terminalCSV() {
   const esc = s => `"${String(s).replace(/"/g, '""')}"`;
-  return "﻿端子,ページ,内部側 線番,内部側 接続,外部側 線番,外部側 接続\n" +
-    buildTerminalList().map(r => [esc(r.tag), r.page, esc(r.a.num), esc(r.a.others.join(" ")), esc(r.b.num), esc(r.b.others.join(" "))].join(",")).join("\n");
+  const fmt = side => side.others.length > 4
+    ? `${side.others.slice(0, 4).join(" ")} ほか${side.others.length - 4}点`
+    : side.others.join(" ");
+  return "﻿端子,ページ,外部側 線番,外部側 接続 (現場),内部側 線番,内部側 接続 (盤内)\n" +
+    buildTerminalList().map(r => [esc(r.tag), r.page, esc(r.ext.num), esc(fmt(r.ext)), esc(r.int.num), esc(fmt(r.int))].join(",")).join("\n");
 }
 
 /* ══════════════ 元に戻す / やり直し ══════════════ */

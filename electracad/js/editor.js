@@ -764,6 +764,7 @@ function onMouseUp(e) {
 }
 
 function onDblClick(e) {
+  if (App.sim.running) return; // シミュレーション中は編集系ダイアログを開かない
   const w = screenToWorld(e.clientX, e.clientY);
   if (App.tool === "wire" && Editor.wireDraft) {
     finishWireDraft();
@@ -843,28 +844,64 @@ function rotateSelection() {
   }
   const page = curPage();
   const devs = page.devices.filter(d => App.selection.has(d.id));
-  if (!devs.length) return;
+  const selWires = page.wires.filter(w => App.selection.has(w.id));
+  const selTexts = page.texts.filter(t => App.selection.has(t.id));
+  if (!devs.length && !selWires.length) {
+    UI.setMsg("回転するデバイスを選択してください");
+    return;
+  }
   commit();
+
+  if (devs.length + selWires.length > 1) {
+    // ── ブロック回転: 選択全体を共通中心のまわりに +90° 回す ──
+    // (デバイス個別回転では接続が壊れるため、配線・テキストも含めて座標変換する)
+    let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
+    devs.forEach(d => { const b = devBounds(d); minX = Math.min(minX, b.x); minY = Math.min(minY, b.y); maxX = Math.max(maxX, b.x + b.w); maxY = Math.max(maxY, b.y + b.h); });
+    selWires.forEach(w => w.pts.forEach(p => { minX = Math.min(minX, p[0]); minY = Math.min(minY, p[1]); maxX = Math.max(maxX, p[0]); maxY = Math.max(maxY, p[1]); }));
+    const cx = snap((minX + maxX) / 2), cy = snap((minY + maxY) / 2);
+    const rot = (x, y) => [cx - (y - cy), cy + (x - cx)]; // +90° (時計回り)
+    const attached = collectAttachedEndpoints(page, devs);
+    devs.forEach(d => {
+      [d.x, d.y] = rot(d.x, d.y);
+      d.rot = ((d.rot || 0) + 90) % 360;
+    });
+    selWires.forEach(w => { w.pts = w.pts.map(p => rot(p[0], p[1])); });
+    selTexts.forEach(t => { [t.x, t.y] = rot(t.x, t.y); });
+    // 選択外の接続ワイヤ端点を新しいピン位置へ追従
+    reattachAfterTransform(page, devs, attached);
+    UI.setMsg("ブロック回転しました (選択全体を +90°)");
+  } else if (devs.length === 1) {
+    const dev = devs[0];
+    const attached = collectAttachedEndpoints(page, [dev]);
+    dev.rot = ((dev.rot || 0) + 90) % 360;
+    reattachAfterTransform(page, [dev], attached);
+    UI.setMsg("回転しました (接続配線を追従)");
+  }
+  requestRender();
+}
+
+/** 選択デバイスのピンに乗っているワイヤ端点を記録 (選択済みワイヤは除外) */
+function collectAttachedEndpoints(page, devs) {
+  const attached = [];
   devs.forEach(dev => {
-    // 回転前の各ピンに接続していたワイヤ端点を記録し、回転後のピン位置へ追従させる
     const before = devPins(dev);
-    const attached = [];
     page.wires.forEach(wire => {
+      if (App.selection.has(wire.id)) return;
       wire.pts.forEach((p, i) => {
         if (i !== 0 && i !== wire.pts.length - 1) return;
         before.forEach((pin, pi) => {
-          if (Math.abs(p[0] - pin.x) < .01 && Math.abs(p[1] - pin.y) < .01) attached.push({ wire, i, pi });
+          if (Math.abs(p[0] - pin.x) < .01 && Math.abs(p[1] - pin.y) < .01) attached.push({ wire, i, dev, pi });
         });
       });
     });
-    dev.rot = ((dev.rot || 0) + 90) % 360;
-    const after = devPins(dev);
-    attached.forEach(({ wire, i, pi }) => {
-      moveWireEndpoint(wire, i, [after[pi].x, after[pi].y]);
-    });
   });
-  UI.setMsg("回転しました (接続配線を追従)");
-  requestRender();
+  return attached;
+}
+function reattachAfterTransform(page, devs, attached) {
+  attached.forEach(({ wire, i, dev, pi }) => {
+    const after = devPins(dev);
+    if (after[pi]) moveWireEndpoint(wire, i, [after[pi].x, after[pi].y]);
+  });
 }
 
 /** ワイヤ端点を np へ移し、隣接点をずらして直交を維持する */
@@ -915,10 +952,18 @@ function pasteClipboard() {
   const lw = Editor.lastWorld;
   if (lw && lw.x > -20 && lw.x < SHEET.w + 20 && lw.y > -20 && lw.y < SHEET.h + 20) {
     dx = snap(lw.x) - minX; dy = snap(lw.y) - minY;
-    if (dx === 0 && dy === 0) { dx = 10; dy = 10; } // 同位置貼り付けの完全重畳を防ぐ
   } else {
     cb.pasteCount = (cb.pasteCount || 0) + 1;
     dx = 10 * cb.pasteCount; dy = 10 * cb.pasteCount;
+  }
+  // 同じ位置への連続ペーストは 10mm ずつずらして完全重畳を防ぐ
+  const key = dx + "," + dy;
+  if (cb.lastKey !== undefined && cb.lastKey === key) {
+    cb.dupCount = (cb.dupCount || 0) + 1;
+    dx += 10 * cb.dupCount; dy += 10 * cb.dupCount;
+  } else {
+    cb.lastKey = key;
+    cb.dupCount = 0;
   }
   cb.devs.forEach(d0 => {
     const d = deepCopy(d0);
