@@ -261,10 +261,9 @@ function devLabelsSVG(dev, sym) {
   let out = "";
   const horizontal = (dev.rot || 0) % 180 !== 0;
   if (horizontal) {
-    // 横向きデバイス: ラベルを上下に置く (横引きレールとの重なり防止)
-    const cx = b.x + b.w / 2;
-    if (tag) out += `<text x="${cx}" y="${b.y - 2}" font-size="3.6" text-anchor="middle" fill="${INK}" font-weight="600" font-family="monospace">${escXML(tag)}</text>`;
-    if (dev.desc) out += `<text x="${cx}" y="${b.y + b.h + 4}" font-size="2.8" text-anchor="middle" fill="${INK_SOFT}">${escXML(dev.desc)}</text>`;
+    // 横向きデバイス: タグは右肩に置く (レール・隣接ピン名との重なり防止)
+    if (tag) out += `<text x="${b.x + b.w - 2.5}" y="${b.y - 2}" font-size="3.6" text-anchor="start" fill="${INK}" font-weight="600" font-family="monospace">${escXML(tag)}</text>`;
+    if (dev.desc) out += `<text x="${b.x + b.w / 2}" y="${b.y + b.h + 4}" font-size="2.8" text-anchor="middle" fill="${INK_SOFT}">${escXML(dev.desc)}</text>`;
     return out;
   }
   const labelX = b.x - 2.2, labelYc = b.y + b.h / 2;

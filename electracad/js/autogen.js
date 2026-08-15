@@ -194,9 +194,9 @@ function aiGenerate(sel) {
       if (wn && !hasNext) wn.stub = true;
     }
     if (hasNext) {
-      // 右端に送り側の電位リンク
+      // 右端に送り側の電位リンク (0V側は最終ラングの機能テキストと重なるため注記なし)
       addDevice(pg, "link", endX, sheet.ctrlRailY, { tag: ctrlTag, desc: "次ページへ" });
-      addDevice(pg, "link", endX, L.botRailY, { tag: "0V", desc: "次ページへ" });
+      addDevice(pg, "link", endX, L.botRailY, { tag: "0V", desc: "" });
     }
   }
 

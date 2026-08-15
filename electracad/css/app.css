@@ -342,7 +342,8 @@ input, select, textarea { font-family: inherit; }
 .bom-table td { padding: 6px 8px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
 .bom-table td.mono { font-family: var(--mono); color: var(--accent-2); }
 .bom-table td.clip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bom-actions { display: flex; gap: 8px; margin-top: 12px; }
+.bom-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.bom-actions .btn-solid { white-space: nowrap; flex: 1 1 auto; }
 
 /* ══════════════ ステータスバー ══════════════ */
 #statusbar {
