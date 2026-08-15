@@ -11,7 +11,7 @@
   --line-soft: #202839;
   --text:      #dfe6f2;
   --text-dim:  #8b96ab;
-  --text-faint:#5c6678;
+  --text-faint:#7b869c;
   --accent:    #4da3ff;
   --accent-2:  #6fb6ff;
   --accent-dim:#1d3a55;
@@ -31,6 +31,16 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; overflow: hidden; }
+/* フォーカスリングはキーボード操作時のみ (クリック後の残留を防ぐ) */
+button:focus { outline: none; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* シミュレーション中は編集系ボタンを無効表示 */
+#app.simming .rbtn.tool:not([data-tool="select"]):not([data-tool="pan"]),
+#app.simming #btnRotate, #app.simming #btnDelete, #app.simming #btnWireNum,
+#app.simming #btnUndo, #app.simming #btnRedo, #app.simming #btnAIWizard,
+#app.simming #btnAddPage, #app.simming #sidebar .sym-item {
+  opacity: .35; pointer-events: none;
+}
 body {
   font-family: var(--font);
   font-size: 13px;
@@ -104,7 +114,7 @@ input, select, textarea { font-family: inherit; }
 .rbtn {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
   min-width: 54px; height: 100%; padding: 4px 8px; border-radius: var(--r-sm);
-  color: var(--text-dim); font-size: 10.5px; transition: all .12s;
+  color: var(--text-dim); font-size: 11px; transition: all .12s;
   border: 1px solid transparent;
 }
 .rbtn svg { width: 19px; height: 19px; }
@@ -173,7 +183,7 @@ input, select, textarea { font-family: inherit; }
   color: #cdd7e8;
 }
 .sym-item .sym-thumb svg { max-width: 54px; max-height: 40px; overflow: visible; }
-.sym-item .sym-name { font-size: 10.5px; color: var(--text-dim); line-height: 1.25; }
+.sym-item .sym-name { font-size: 11px; color: var(--text-dim); line-height: 1.25; }
 .sym-item:hover .sym-name { color: var(--text); }
 .side-foot {
   padding: 8px 14px; font-size: 10.5px; color: var(--text-faint);
@@ -274,6 +284,12 @@ input, select, textarea { font-family: inherit; }
   color: var(--text); font-size: 12.5px; padding: 7px 10px; outline: none; transition: border-color .12s;
 }
 .prop-row input:focus, .prop-row select:focus, .prop-row textarea:focus { border-color: var(--accent); }
+.prop-row select {
+  appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%237b869c' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center;
+  padding-right: 28px; cursor: pointer;
+}
 .prop-row input.mono { font-family: var(--mono); }
 .prop-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .prop-sect {
@@ -355,7 +371,8 @@ input, select, textarea { font-family: inherit; }
 /* ══════════════ モーダル ══════════════ */
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 200; background: rgba(5,7,12,.6);
-  backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(4px); display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 6vh; /* 上端アンカー: ステップ遷移で高さが変わってもヘッダが跳ねない */
   animation: fadeIn .15s ease-out;
 }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -412,7 +429,7 @@ input, select, textarea { font-family: inherit; }
 .wiz-card .wc-thumb { height: 46px; display: flex; align-items: center; justify-content: center; color: #d5deee; }
 .wiz-card .wc-thumb svg { max-height: 46px; max-width: 80px; overflow: visible; }
 .wiz-card .wc-name { font-size: 12px; font-weight: 600; }
-.wiz-card .wc-desc { font-size: 10.5px; color: var(--text-dim); line-height: 1.35; }
+.wiz-card .wc-desc { font-size: 10.5px; color: var(--text-dim); line-height: 1.35; min-height: 2.7em; }
 .wiz-card .wc-qty {
   position: absolute; top: 6px; right: 6px; display: none;
   min-width: 20px; height: 20px; border-radius: 100px; background: var(--accent); color: #fff;
@@ -444,7 +461,7 @@ input, select, textarea { font-family: inherit; }
   font-size: 12px; line-height: 1.65; color: #c7dcf7;
 }
 .wiz-ai-note svg { width: 17px; height: 17px; flex-shrink: 0; color: var(--accent); margin-top: 2px; }
-.wiz-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.wiz-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 10px; margin-top: 14px; }
 .wiz-opt {
   display: flex; align-items: center; gap: 10px; padding: 10px 13px; border-radius: var(--r-md);
   background: var(--panel-2); border: 1.5px solid var(--line-soft); cursor: pointer; transition: all .13s;

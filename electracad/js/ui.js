@@ -91,8 +91,26 @@ UI.buildPageTabs = () => {
     });
     el.addEventListener("dblclick", e => {
       if (e.target.classList.contains("ptab-close")) return;
-      const name = prompt("ページ名", pg.name);
-      if (name) { commit(); pg.name = name; UI.refresh(); }
+      // インラインリネーム (prompt は使わない)
+      const span = el.querySelector("span:nth-child(2)");
+      const inp = h(`<input value="${pg.name.replace(/"/g, "&quot;")}" style="width:${Math.max(60, pg.name.length * 13)}px;background:var(--bg);border:1px solid var(--accent);border-radius:4px;color:var(--text);font-size:12px;padding:1px 6px;outline:none"/>`);
+      span.replaceWith(inp);
+      inp.focus(); inp.select();
+      let closed = false;
+      const done = (save) => {
+        if (closed) return;
+        closed = true;
+        const v = inp.value.trim();
+        if (save && v && v !== pg.name) { commit(); pg.name = v; }
+        UI.refresh();
+      };
+      inp.addEventListener("keydown", ev => {
+        if (ev.key === "Enter") done(true);
+        if (ev.key === "Escape") done(false);
+        ev.stopPropagation();
+      });
+      inp.addEventListener("blur", () => done(true));
+      inp.addEventListener("click", ev => ev.stopPropagation());
     });
     wrap.appendChild(el);
   });
@@ -125,7 +143,7 @@ UI.showProps = (focusTag = false) => {
       </div>
       <div class="prop-row"><label>デバイスタグ (DT)</label><input id="pTag" class="mono" value="${dev.linkTo ? displayTag(dev) : (dev.tag || "")}" ${dev.linkTo ? "disabled" : ""}/></div>
       <div class="prop-row"><label>機能テキスト</label><input id="pDesc" value="${(dev.desc || "").replace(/"/g, "&quot;")}"/></div>
-      <div class="prop-row"><label>型式 (部品表用)</label><input id="pType" class="mono" value="${(dev.typeRef || "").replace(/"/g, "&quot;")}" placeholder="例: MY2N-D2 DC24"/></div>
+      <div class="prop-row"><label>型式 (部品表用)</label><input id="pType" class="mono" value="${(dev.typeRef || "").replace(/"/g, "&quot;")}" placeholder="${sym.typ ? "例: " + sym.typ : "型式を入力"}"/></div>
       <div class="prop-grid2">
         <div class="prop-row"><label>X (mm)</label><input id="pX" class="mono" type="number" step="5" value="${dev.x}"/></div>
         <div class="prop-row"><label>Y (mm)</label><input id="pY" class="mono" type="number" step="5" value="${dev.y}"/></div>
@@ -142,13 +160,23 @@ UI.showProps = (focusTag = false) => {
       const el = pane.querySelector(id);
       if (el) el.addEventListener("change", () => { commit(); fn(el.value); UI.refresh(false); });
     };
-    bind("#pTag", v => dev.tag = v.trim());
+    bind("#pTag", v => {
+      const nv = v.trim();
+      // タグ重複の即時警告 (DRC を待たない)
+      let dup = false;
+      App.project.pages.forEach(pg => pg.devices.forEach(d => {
+        if (d !== dev && !d.linkTo && d.tag === nv && nv) dup = true;
+      }));
+      if (dup) UI.toast(`⚠ タグ ${nv} は既に使われています (DRCでエラーになります)`, 3800);
+      dev.tag = nv;
+    });
     bind("#pDesc", v => dev.desc = v.trim());
     bind("#pType", v => dev.typeRef = v.trim());
-    bind("#pX", v => dev.x = snap(parseFloat(v) || dev.x));
-    bind("#pY", v => dev.y = snap(parseFloat(v) || dev.y));
+    const num = (v, old) => { const n = parseFloat(v); return isNaN(n) ? old : snap(n); }; // 0 も入力可
+    bind("#pX", v => dev.x = num(v, dev.x));
+    bind("#pY", v => dev.y = num(v, dev.y));
     bind("#pLink", v => dev.linkTo = v || null);
-    bind("#pDelay", v => dev.props.delay = parseFloat(v) || 2);
+    bind("#pDelay", v => { const n = parseFloat(v); dev.props.delay = isNaN(n) ? 2 : n; });
     if (focusTag) { const t = pane.querySelector("#pTag"); if (t && !t.disabled) { t.focus(); t.select(); } }
     pane.querySelectorAll(".xref-item").forEach(el => {
       el.addEventListener("click", () => UI.jumpToDevice(el.dataset.target));
@@ -165,8 +193,15 @@ UI.showProps = (focusTag = false) => {
     const w = selWires[0];
     pane.innerHTML = `
       <div class="prop-head"><div class="prop-head-txt"><div class="t1">配線</div><div class="t2">${w.pts.length - 1} セグメント</div></div></div>
-      <div class="prop-row"><label>配線番号</label><input id="pNum" class="mono" value="${w.num || ""}"/></div>`;
-    pane.querySelector("#pNum").addEventListener("change", e => { commit(); w.num = e.target.value.trim() || null; UI.refresh(false); });
+      <div class="prop-row"><label>配線番号 ${w.fixed ? "(手動・自動採番から保護)" : ""}</label><input id="pNum" class="mono" value="${w.num || ""}"/></div>`;
+    pane.querySelector("#pNum").addEventListener("change", e => {
+      commit();
+      const v = e.target.value.trim();
+      w.num = v || null;
+      w.fixed = !!v; // 手動線番は自動付与で上書きしない
+      w.numShow = !!v;
+      UI.refresh(false);
+    });
   } else {
     pane.innerHTML = `
       <div class="prop-empty">
@@ -214,18 +249,22 @@ UI.runDRC = () => {
   UI.activateRightTab("drc");
   const pane = document.getElementById("pane-drc");
   const issues = runDRC();
+  const nPages = App.project.pages.length;
   let html = `<div class="drc-run-row"><button class="btn-solid primary" id="drcRerun">再チェック</button></div>`;
+  html += `<div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">${DRC_RULES.length} ルール × ${nPages} ページを検査 — `;
   if (!issues.length) {
+    html += `指摘なし</div>`;
     html += `<div class="drc-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12.5l3 3 5-6"/></svg><br>問題は見つかりませんでした</div>`;
   } else {
     const errs = issues.filter(i => i.sev === "err").length;
-    html += `<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px">エラー ${errs} ・ 警告 ${issues.length - errs}</div>`;
+    html += `<b style="color:var(--err)">エラー ${errs}</b> ・ <b style="color:var(--warn)">警告 ${issues.length - errs}</b></div>`;
     issues.forEach((iss, i) => {
+      const [pg, col] = String(iss.loc).split(".");
       html += `<div class="drc-item ${iss.sev}" data-i="${i}">
         <span class="drc-ico">${iss.sev === "err"
           ? '<svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="#fff" stroke-width="1.6"/></svg>'
           : '<svg width="14" height="14" viewBox="0 0 16 16"><path d="M8 1.5L15 14H1L8 1.5z" fill="currentColor"/><path d="M8 6v3.5M8 11.5v1.5" stroke="#3a2b12" stroke-width="1.4"/></svg>'}</span>
-        <div><div class="drc-msg">${iss.msg}</div><div class="drc-loc">ページ ${iss.page} ・ 位置 ${iss.loc}</div></div>
+        <div><div class="drc-msg">${iss.msg}</div><div class="drc-loc">ページ ${iss.page}${col !== undefined && col !== "-" ? ` ・ 列 ${col}` : ""} — クリックでジャンプ</div></div>
       </div>`;
     });
   }
@@ -249,15 +288,37 @@ UI.showBOM = () => {
     pane.innerHTML = `<div class="prop-empty">デバイスを配置すると<br>部品表が自動生成されます</div>`;
     return;
   }
+  const plc = buildPLCList();
+  const esc = s => String(s).replace(/</g, "&lt;");
   pane.innerHTML = `
     <table class="bom-table">
-      <thead><tr><th>名称</th><th>型式</th><th>数</th></tr></thead>
-      <tbody>${rows.map(r => `<tr title="${r.tags.join(", ")}"><td>${r.name}</td><td class="mono">${r.typeRef}</td><td>${r.tags.length}</td></tr>`).join("")}</tbody>
+      <thead><tr><th>デバイスタグ</th><th>名称</th><th>型式</th><th>数</th></tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td class="mono" title="${esc(r.tags.join(", "))}">${esc(r.tags.length > 3 ? r.tags.slice(0, 3).join(" ") + " …" : r.tags.join(" "))}</td>
+        <td>${esc(r.name)}</td><td class="mono">${esc(r.typeRef)}</td><td>${r.tags.length}</td></tr>`).join("")}</tbody>
     </table>
-    <div class="bom-actions"><button class="btn-solid" id="bomCsv">CSV 出力</button></div>`;
+    ${plc.length ? `
+    <div class="prop-sect" style="margin-top:16px">PLC アドレス一覧</div>
+    <table class="bom-table">
+      <thead><tr><th>アドレス</th><th>種別</th><th>タグ</th><th>位置</th></tr></thead>
+      <tbody>${plc.map(r => `<tr><td class="mono">${esc(r.addr)}</td><td>${r.kind}</td><td class="mono">${esc(r.tag)}</td><td class="mono">/${r.loc}</td></tr>`).join("")}</tbody>
+    </table>` : ""}
+    <div class="bom-actions">
+      <button class="btn-solid" id="bomCsv">部品表CSV</button>
+      <button class="btn-solid" id="connCsv">接続リストCSV</button>
+      <button class="btn-solid" id="termCsv">端子表CSV</button>
+    </div>`;
   pane.querySelector("#bomCsv").addEventListener("click", () => {
     downloadFile(App.project.name + "_部品表.csv", bomCSV(), "text/csv");
     UI.setMsg("部品表CSVを出力しました");
+  });
+  pane.querySelector("#connCsv").addEventListener("click", () => {
+    downloadFile(App.project.name + "_接続リスト.csv", connectionCSV(), "text/csv");
+    UI.setMsg("接続リストCSVを出力しました");
+  });
+  pane.querySelector("#termCsv").addEventListener("click", () => {
+    downloadFile(App.project.name + "_端子表.csv", terminalCSV(), "text/csv");
+    UI.setMsg("端子表CSVを出力しました");
   });
 };
 
@@ -299,7 +360,11 @@ const MENUS = {
   project: [
     { label: "設計ルールチェック (DRC)", key: "", fn: () => UI.runDRC() },
     { label: "部品表 (BOM)", key: "", fn: () => UI.showBOM() },
-    { label: "配線番号の自動付与", key: "", fn: () => { commit(); autoNumberWires(); UI.refresh(false); UI.setMsg("配線番号を付与しました"); } },
+    { label: "配線番号の自動付与", key: "", fn: () => { commit(); autoNumberWires(); UI.refresh(false); UI.setMsg("配線番号を付与しました (手動線番は保護)"); } },
+    { sep: true },
+    { label: "部品表CSV を出力", key: "", fn: () => downloadFile(App.project.name + "_部品表.csv", bomCSV(), "text/csv") },
+    { label: "接続リストCSV を出力", key: "", fn: () => downloadFile(App.project.name + "_接続リスト.csv", connectionCSV(), "text/csv") },
+    { label: "端子表CSV を出力", key: "", fn: () => downloadFile(App.project.name + "_端子表.csv", terminalCSV(), "text/csv") },
     { sep: true },
     { label: "通電シミュレーション", key: "F5", fn: () => UI.toggleSim() },
   ],
@@ -313,7 +378,9 @@ UI.setupMenus = () => {
   document.querySelectorAll("#menubar .menu").forEach(m => {
     m.addEventListener("click", e => {
       e.stopPropagation();
+      const wasOpen = UI._openMenu === m; // 同じメニューの再クリックはトグルで閉じる
       UI.closeDropdown();
+      if (wasOpen) return;
       const items = MENUS[m.dataset.menu];
       if (!items) return;
       m.classList.add("open");
@@ -338,10 +405,19 @@ UI.closeDropdown = () => {
 
 /* ══════════════ ツール切替 ══════════════ */
 UI.setTool = (tool) => {
+  if (App.sim.running && tool !== "select" && tool !== "pan") {
+    UI.setMsg("シミュレーション中は編集ツールを使えません (Escで終了)");
+    return;
+  }
   App.tool = tool;
   cancelDraft();
   UI.syncToolButtons();
-  const modeNames = { select: "選択モード", wire: "配線モード — クリックで配線開始", pan: "パンモード", text: "テキストモード — クリックで文字入力" };
+  const modeNames = {
+    select: "選択モード",
+    wire: "配線モード — ピンをクリックで開始 / クリックで曲げ / ダブルクリックか Enter で確定 / Backspace で1点戻る / Esc でキャンセル",
+    pan: "パンモード",
+    text: "テキストモード — クリックで文字入力",
+  };
   document.getElementById("stMode").textContent = modeNames[tool] || tool;
   const cv = document.getElementById("canvas");
   cv.setAttribute("class", "tool-" + tool + (App.sim.running ? " simmode" : ""));
@@ -352,28 +428,35 @@ UI.syncToolButtons = () => {
 
 /* ══════════════ シミュレーション ══════════════ */
 UI.toggleSim = () => {
+  const btn = document.getElementById("btnSim");
   if (App.sim.running) {
     simStop();
-    document.getElementById("btnSim").classList.remove("active");
+    btn.classList.remove("active");
     document.getElementById("simBanner").classList.add("hidden");
+    document.getElementById("app").classList.remove("simming");
     clearInterval(UI._simT);
     UI.setTool("select");
     UI.setMsg("シミュレーションを終了しました");
   } else {
     App.selection.clear();
     cancelDraft();
+    App.tool = "select";
+    UI.syncToolButtons();
     simStart();
-    document.getElementById("btnSim").classList.add("active");
+    btn.classList.add("active");
     document.getElementById("simBanner").classList.remove("hidden");
+    document.getElementById("app").classList.add("simming");
     document.getElementById("canvas").classList.add("simmode");
     UI._simT = setInterval(() => { simSolve(); requestRender(); }, 120);
-    UI.setMsg("シミュレーション実行中");
+    UI.setMsg("シミュレーション実行中 — 編集はロックされています");
   }
+  btn.blur(); // フォーカスリング残留を防ぐ
   requestRender();
 };
 
 /* ══════════════ ページ / プロジェクト操作 ══════════════ */
 UI.addPage = () => {
+  if (App.sim.running) return;
   commit();
   const pg = newPage("ページ " + (App.project.pages.length + 1), App.project.pages.length + 1);
   App.project.pages.push(pg);
@@ -444,14 +527,18 @@ UI.openTextInput = (clientX, clientY, wx, wy, existing = null) => {
   const root = document.getElementById("overlay-root");
   const inp = h(`<input style="position:fixed;left:${clientX}px;top:${clientY - 14}px;z-index:300;
     background:var(--panel-2);border:1px solid var(--accent);border-radius:6px;color:var(--text);
-    font-size:13px;padding:5px 9px;outline:none;min-width:140px" placeholder="テキストを入力…"/>`);
+    font-size:13px;padding:5px 9px;outline:none;min-width:140px" placeholder="テキストを入力… (Enterで確定)"/>`);
   if (existing) inp.value = existing.text;
   root.appendChild(inp);
-  inp.focus();
+  // mousedown 由来のフォーカス競合を避けるため次フレームでフォーカス
+  requestAnimationFrame(() => { inp.focus(); inp.select(); });
+  let closed = false; // Enter→remove→blur の再入で二重確定・例外になるのを防ぐ
   const done = (save) => {
+    if (closed) return;
+    closed = true;
     const v = inp.value.trim();
     inp.remove();
-    if (save && v) {
+    if (save && v && (!existing || v !== existing.text)) {
       commit();
       if (existing) existing.text = v;
       else curPage().texts.push({ id: uid("t"), x: wx, y: wy, text: v, size: 4 });
@@ -523,7 +610,7 @@ UI.openWizard = () => {
   const state = {
     step: 0,
     inputs: new Map(), logics: new Map(), outputs: new Map(),
-    opts: { selfHold: true, lampFb: false, autoNum: true },
+    opts: { selfHold: true, lampFb: false, autoNum: true, terminals: true },
   };
   const stepsDef = [
     { key: "inputs", title: "インプット機器", sub: "操作スイッチ・センサなど、回路の入力となる機器を選択", cat: "input" },
@@ -539,12 +626,12 @@ UI.openWizard = () => {
     output: SYMBOLS.filter(s => s.cat === "output" && s.id !== "main_cont"),
   };
 
-  const body = h(`<div></div>`);
-  const foot = h(`<div style="display:flex;gap:10px;width:100%">
-    <button class="btn-solid" id="wzBack">戻る</button>
-    <span style="flex:1"></span>
-    <button class="btn-solid" id="wzSkip">スキップ</button>
-    <button class="btn-solid primary" id="wzNext">次へ →</button>
+  const body = h(`<div style="min-height:430px"></div>`);
+  const foot = h(`<div style="display:flex;gap:10px;width:100%;align-items:center">
+    <button class="btn-solid" id="wzBack" style="flex:0 0 auto;padding:8px 18px">← 戻る</button>
+    <span id="wzWarn" style="flex:1;font-size:12px;color:var(--warn)"></span>
+    <button class="btn-solid" id="wzSkip" style="flex:0 0 auto;padding:8px 18px;background:none;border-color:transparent;color:var(--text-dim)">スキップ</button>
+    <button class="btn-solid primary" id="wzNext" style="flex:0 0 auto;min-width:150px">次へ →</button>
   </div>`);
   const modal = UI.openModal({
     title: `<svg width="17" height="17" viewBox="0 0 16 16" style="vertical-align:-2px;margin-right:6px"><path d="M8 1l1.8 4.2L14 7l-4.2 1.8L8 13 6.2 8.8 2 7l4.2-1.8L8 1zm5 9l.9 2.1L16 13l-2.1.9L13 16l-.9-2.1L10 13l2.1-.9L13 10z" fill="#4da3ff"/></svg>AI 自動作図`,
@@ -597,6 +684,7 @@ UI.openWizard = () => {
       </div>
       <div class="wiz-opts">
         <div class="wiz-opt ${state.opts.selfHold ? "sel" : ""}" data-opt="selfHold"><span class="wo-check"></span><span class="wo-txt"><span class="t">自己保持回路</span><br><span class="d">押しボタン起動を保持 (3ワイヤ制御)</span></span></div>
+        <div class="wiz-opt ${state.opts.terminals ? "sel" : ""}" data-opt="terminals"><span class="wo-check"></span><span class="wo-txt"><span class="t">端子台を自動挿入</span><br><span class="d">現場機器との境界に -X1:n を配置</span></span></div>
         <div class="wiz-opt ${state.opts.lampFb ? "sel" : ""}" data-opt="lampFb"><span class="wo-check"></span><span class="wo-txt"><span class="t">動作表示灯を追加</span><br><span class="d">各コイルの動作をランプ表示</span></span></div>
         <div class="wiz-opt ${state.opts.autoNum ? "sel" : ""}" data-opt="autoNum"><span class="wo-check"></span><span class="wo-txt"><span class="t">配線番号の自動付与</span><br><span class="d">ネット単位で線番を採番</span></span></div>
       </div>`;
@@ -632,17 +720,18 @@ UI.openWizard = () => {
     foot.querySelector("#wzNext").textContent = state.step === stepsDef.length - 1 ? "⚡ 回路を生成" : "次へ →";
   }
 
+  const warn = msg => { const el = foot.querySelector("#wzWarn"); el.textContent = msg; setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 3500); };
   foot.querySelector("#wzBack").addEventListener("click", () => { if (state.step > 0) { state.step--; render(); } });
   foot.querySelector("#wzSkip").addEventListener("click", () => { state.step++; render(); });
   foot.querySelector("#wzNext").addEventListener("click", () => {
     if (state.step < stepsDef.length - 1) {
-      // 入力チェック
+      // 入力チェック (モーダル内に表示 — 背面トーストは見えない)
       if (stepsDef[state.step].key === "inputs" && ![...state.inputs.values()].some(v => v > 0)) {
-        UI.toast("⚠ インプット機器を1つ以上選択してください");
+        warn("⚠ インプット機器を1つ以上選択してください");
         return;
       }
       if (stepsDef[state.step].key === "outputs" && ![...state.outputs.values()].some(v => v > 0)) {
-        UI.toast("⚠ アウトプット機器を1つ以上選択してください");
+        warn("⚠ アウトプット機器を1つ以上選択してください");
         return;
       }
       state.step++;
@@ -704,41 +793,54 @@ UI.openWizard = () => {
 UI.setupKeys = () => {
   window.addEventListener("keydown", e => {
     const inInput = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName);
-    if (inInput) return;
     const ctrl = e.ctrlKey || e.metaKey;
-    if (ctrl && e.key === "z") { e.preventDefault(); if (undo()) UI.refresh(); return; }
-    if (ctrl && (e.key === "y" || (e.shiftKey && e.key === "Z"))) { e.preventDefault(); if (redo()) UI.refresh(); return; }
-    if (ctrl && e.key === "c") { copySelection(); return; }
-    if (ctrl && e.key === "v") { pasteClipboard(); return; }
-    if (ctrl && e.key === "a") { e.preventDefault(); UI.selectAll(); return; }
-    if (ctrl && e.key === "s") { e.preventDefault(); saveLocal(); UI.setMsg("ブラウザに保存しました"); return; }
-    if (ctrl && e.key === "p") { e.preventDefault(); UI.print(); return; }
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; // CapsLock 対策
+    // ブラウザ既定動作を奪うキーは入力中でも先に処理 (F5リロード・保存ダイアログ防止)
+    if (e.key === "F5") { e.preventDefault(); if (!inInput) UI.toggleSim(); return; }
+    if (ctrl && k === "s") { e.preventDefault(); saveLocal(); UI.setMsg("ブラウザに保存しました"); return; }
+    if (ctrl && k === "p") { e.preventDefault(); if (!inInput) UI.print(); return; }
+    if (inInput) return;
+    if (ctrl && k === "z" && !e.shiftKey) { e.preventDefault(); if (undo()) { UI.refresh(); UI.setMsg("元に戻しました"); } return; }
+    if (ctrl && (k === "y" || (e.shiftKey && k === "z"))) { e.preventDefault(); if (redo()) { UI.refresh(); UI.setMsg("やり直しました"); } return; }
+    if (ctrl && k === "c") { copySelection(); return; }
+    if (ctrl && k === "v") { pasteClipboard(); return; }
+    if (ctrl && k === "a") { e.preventDefault(); UI.selectAll(); return; }
     switch (e.key) {
-      case "Delete": case "Backspace": deleteSelection(); break;
-      case "Escape":
-        if (App.sim.running) { UI.toggleSim(); break; }
-        if (Editor.wireDraft || Editor.ghost) cancelDraft();
-        else { App.selection.clear(); UI.showProps(); requestRender(); }
-        UI.setTool("select");
+      case "Backspace":
+        if (wireDraftBack()) return; // 配線作図中は1頂点戻る
+        deleteSelection();
+        return;
+      case "Delete": deleteSelection(); return;
+      case "Enter":
+        if (Editor.wireDraft && Editor.wireDraft.pts.length >= 2) { finishWireDraft(); return; }
         break;
-      case "v": case "V": UI.setTool("select"); break;
-      case "w": case "W": UI.setTool("wire"); break;
-      case "h": case "H": UI.setTool("pan"); break;
-      case "t": case "T": UI.setTool("text"); break;
-      case "r": case "R": rotateSelection(); break;
-      case "f": case "F": zoomFit(); break;
-      case "+": case "=": UI.zoomCenter(1.25); break;
-      case "-": UI.zoomCenter(0.8); break;
-      case "F2": e.preventDefault(); UI.openWizard(); break;
-      case "F5": e.preventDefault(); UI.toggleSim(); break;
-      case "ArrowLeft": if (App.selection.size) { e.preventDefault(); nudgeSelection(-GRID, 0); } break;
-      case "ArrowRight": if (App.selection.size) { e.preventDefault(); nudgeSelection(GRID, 0); } break;
-      case "ArrowUp": if (App.selection.size) { e.preventDefault(); nudgeSelection(0, -GRID); } break;
-      case "ArrowDown": if (App.selection.size) { e.preventDefault(); nudgeSelection(0, GRID); } break;
+      case "Escape":
+        if (App.sim.running) { UI.toggleSim(); return; }
+        UI.closeDropdown();
+        if (Editor.wireDraft) { cancelDraft(); return; } // 1段階目: 作図キャンセル (ツール維持)
+        if (Editor.ghost) { cancelDraft(); UI.setTool("select"); return; }
+        App.selection.clear(); UI.showProps(); requestRender();
+        UI.setTool("select");
+        return;
+      case "F2": e.preventDefault(); UI.openWizard(); return;
+      case "ArrowLeft": if (App.selection.size) { e.preventDefault(); nudgeSelection(-GRID, 0); } return;
+      case "ArrowRight": if (App.selection.size) { e.preventDefault(); nudgeSelection(GRID, 0); } return;
+      case "ArrowUp": if (App.selection.size) { e.preventDefault(); nudgeSelection(0, -GRID); } return;
+      case "ArrowDown": if (App.selection.size) { e.preventDefault(); nudgeSelection(0, GRID); } return;
       case " ":
         if (!Editor.spaceHeld) { Editor.spaceHeld = true; document.getElementById("canvas").style.cursor = "grab"; }
         e.preventDefault();
-        break;
+        return;
+    }
+    switch (k) {
+      case "v": UI.setTool("select"); break;
+      case "w": UI.setTool("wire"); break;
+      case "h": UI.setTool("pan"); break;
+      case "t": UI.setTool("text"); break;
+      case "r": rotateSelection(); break;
+      case "f": zoomFit(); break;
+      case "+": case "=": UI.zoomCenter(1.25); break;
+      case "-": UI.zoomCenter(0.8); break;
     }
   });
   window.addEventListener("keyup", e => {
@@ -775,7 +877,10 @@ function boot() {
   document.getElementById("btnRedo").addEventListener("click", () => { if (redo()) UI.refresh(); });
   document.getElementById("btnRotate").addEventListener("click", rotateSelection);
   document.getElementById("btnDelete").addEventListener("click", deleteSelection);
-  document.getElementById("btnWireNum").addEventListener("click", () => { commit(); autoNumberWires(); UI.refresh(false); UI.setMsg("配線番号を付与しました"); });
+  document.getElementById("btnWireNum").addEventListener("click", () => {
+    if (App.sim.running) return;
+    commit(); autoNumberWires(); UI.refresh(false); UI.setMsg("配線番号を付与しました (手動線番は保護)");
+  });
   document.getElementById("btnDRC").addEventListener("click", UI.runDRC);
   document.getElementById("btnBOM").addEventListener("click", UI.showBOM);
   document.getElementById("btnSim").addEventListener("click", UI.toggleSim);
@@ -784,7 +889,11 @@ function boot() {
   document.getElementById("btnZoomIn").addEventListener("click", () => UI.zoomCenter(1.25));
   document.getElementById("btnZoomOut").addEventListener("click", () => UI.zoomCenter(0.8));
   document.getElementById("btnZoomFit").addEventListener("click", zoomFit);
-  document.getElementById("zoomLabel").addEventListener("click", () => { Editor.view.s = 2.2; requestRender(); updateZoomLabel(); });
+  document.getElementById("zoomLabel").addEventListener("click", () => {
+    // 視点中心を保ったまま 100% へ
+    const r = Editor.svg.getBoundingClientRect();
+    zoomAt(r.left + r.width / 2, r.top + r.height / 2, 2.2 / Editor.view.s);
+  });
   document.getElementById("btnAddPage").addEventListener("click", UI.addPage);
   document.querySelectorAll(".rtab").forEach(t => t.addEventListener("click", () => {
     if (t.dataset.rtab === "drc") UI.runDRC();
@@ -795,10 +904,10 @@ function boot() {
   UI.setTool("select");
   zoomFit();
 
-  // 初回のみクイックスタートのヒント
+  // 初回のみクイックスタートのヒント (図面を隠さないようステータスバーに)
   if (!localStorage.getItem("electracad.seen")) {
     localStorage.setItem("electracad.seen", "1");
-    setTimeout(() => UI.toast(`ようこそ！ <b>AI自動作図</b> ボタン (または <kbd>F2</kbd>) で回路を自動生成できます`, 6000), 600);
+    setTimeout(() => UI.setMsg("ようこそ！ 右上の「AI自動作図」(F2) で回路を自動生成できます"), 600);
   }
 }
 

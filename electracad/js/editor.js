@@ -63,6 +63,10 @@ function renderAll() {
   const svg = Editor.svg;
   if (!svg) return;
   const page = curPage();
+  // シミュレーション中: 表示中ページの通電情報を選ぶ (全ページ同時解決)
+  if (App.sim.running && App.sim.energizedByPage) {
+    App.sim.energized = App.sim.energizedByPage.get(page.id) || null;
+  }
   const { tx, ty, s } = Editor.view;
   const world = svg.querySelector("#world");
   world.setAttribute("transform", `translate(${tx},${ty}) scale(${s})`);
@@ -108,22 +112,33 @@ function sheetSVG(page) {
     out += `<text x="${w - m + 2.6}" y="${cy}" font-size="3.4" text-anchor="middle" fill="${INK_SOFT}" font-family="monospace">${ch}</text>`;
     if (i) out += `<path d="M${m - 5},${m + rh * i} H${m}" stroke="${INK_SOFT}" stroke-width="0.25"/><path d="M${w - m},${m + rh * i} H${w - m + 5}" stroke="${INK_SOFT}" stroke-width="0.25"/>`;
   }
-  // 表題欄
-  const tbW = 130, tbH = 26, tbX = w - m - tbW, tbY = h - m - tbH;
+  // 表題欄 (図番・改訂・設計/検図欄つき)
+  const tbW = 150, tbH = 30, tbX = w - m - tbW, tbY = h - m - tbH;
   const today = new Date();
   const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const meta = App.project.meta || {};
+  const c1 = tbX, c2 = tbX + 52, c3 = tbX + 104, c4 = tbX + 126;
+  const r1 = tbY, r2 = tbY + 10, r3 = tbY + 20, r4 = tbY + tbH;
+  const cell = (x, y, label, value, valSize = 3.4, bold = false) =>
+    `<text x="${x + 2}" y="${y + 3.4}" font-size="2.4" fill="${INK_SOFT}">${label}</text>` +
+    `<text x="${x + 2}" y="${y + 8.2}" font-size="${valSize}" fill="${INK}"${bold ? ' font-weight="bold"' : ""}>${escXML(value)}</text>`;
   out += `<g font-family="sans-serif">
-    <rect x="${tbX}" y="${tbY}" width="${tbW}" height="${tbH}" fill="#fff" stroke="${INK}" stroke-width="0.5"/>
-    <path d="M${tbX},${tbY + 9} H${tbX + tbW} M${tbX + 44},${tbY} V${tbY + tbH} M${tbX + 96},${tbY + 9} V${tbY + tbH} M${tbX + 96},${tbY + 17.5} H${tbX + tbW} M${tbX + 44},${tbY + 17.5} H${tbX + 96}" stroke="${INK}" stroke-width="0.3"/>
-    <text x="${tbX + 3}" y="${tbY + 6.2}" font-size="4.4" fill="${INK}" font-weight="bold">${escXML(App.project.name)}</text>
-    <text x="${tbX + 3}" y="${tbY + 15}" font-size="2.7" fill="${INK_SOFT}">作成</text>
-    <text x="${tbX + 3}" y="${tbY + 18.6}" font-size="3.2" fill="${INK}">${dateStr}</text>
-    <text x="${tbX + 3}" y="${tbY + 24}" font-size="2.7" fill="${INK_SOFT}">ElectraCAD Studio</text>
-    <text x="${tbX + 47}" y="${tbY + 15}" font-size="2.7" fill="${INK_SOFT}">ページ名</text>
-    <text x="${tbX + 47}" y="${tbY + 20.5}" font-size="3.8" fill="${INK}" font-weight="bold">${escXML(page.name)}</text>
-    <text x="${tbX + 99}" y="${tbY + 15}" font-size="2.7" fill="${INK_SOFT}">ページ</text>
-    <text x="${tbX + 99}" y="${tbY + 24}" font-size="5" fill="${INK}" font-weight="bold">${page.no} / ${App.project.pages.length}</text>
-    <text x="${tbX + 99 + 17}" y="${tbY + 24}" font-size="2.9" fill="${INK_SOFT}">A3</text>
+    <rect x="${tbX}" y="${tbY}" width="${tbW}" height="${tbH}" fill="#fff" stroke="${INK}" stroke-width="0.55"/>
+    <path d="M${c1},${r2} H${tbX + tbW} M${c1},${r3} H${tbX + tbW} M${c2},${r1} V${r4} M${c3},${r1} V${r4} M${c4},${r1} V${r4}"
+      stroke="${INK}" stroke-width="0.28"/>
+    ${cell(c1, r1, "プロジェクト", App.project.name, 3.6, true)}
+    ${cell(c2, r1, "ページ名", page.name, 3.6, true)}
+    ${cell(c3, r1, "図番", meta.dwgNo || "E-" + String(page.no).padStart(3, "0"))}
+    ${cell(c4, r1, "改訂", meta.rev || "0")}
+    ${cell(c1, r2, "設計", meta.designer || "—")}
+    ${cell(c2, r2, "検図", meta.checker || "—")}
+    ${cell(c3, r2, "日付", dateStr, 3)}
+    ${cell(c4, r2, "尺度", "1:1")}
+    ${cell(c1, r3, "作成", "ElectraCAD Studio", 3)}
+    ${cell(c2, r3, "用紙", "A3 (420×297)", 3)}
+    <text x="${c3 + 2}" y="${r3 + 3.4}" font-size="2.4" fill="${INK_SOFT}">ページ</text>
+    <text x="${c3 + 2}" y="${r3 + 8.6}" font-size="4.6" fill="${INK}" font-weight="bold">${page.no} / ${App.project.pages.length}</text>
+    <path d="M${c4 + 8},${r3 + 6.5} l3.5,-4.5 h2.5 l-3.5,4.5 h4 l-8,3.5 2,-3.5 z" fill="#2f6fd6"/>
   </g>`;
   return out;
 }
@@ -148,7 +163,9 @@ function wiresSVG(page) {
     // 配線番号 (numShow=false のワイヤはネット内の代表ワイヤに表示を譲る)
     if (w.num && w.numShow !== false) {
       const [mx, my, horiz] = wireLabelPos(w);
-      out += `<text x="${mx}" y="${my}" font-size="3" fill="#7a4ec2" font-family="monospace" text-anchor="middle"${horiz ? "" : ` transform="rotate(-90 ${mx} ${my})"`}>${escXML(w.num)}</text>`;
+      // 縦区間は配線から法線方向 (左) にオフセットして重なりを防ぐ
+      const lx = horiz ? mx : mx - 0.6, ly = horiz ? my : my;
+      out += `<text x="${lx}" y="${ly}" font-size="3" fill="#7a4ec2" font-family="monospace" text-anchor="middle"${horiz ? "" : ` transform="rotate(-90 ${lx} ${ly})"`}>${escXML(w.num)}</text>`;
     }
   });
   // ジャンクションドット
@@ -194,6 +211,12 @@ function devicesSVG(page) {
     }
     out += extra;
     out += symBodySVG(sym, { strokeWidth: 1.15 * 0.42 }); // 画面上で約0.5mm相当
+    // 端子番号 (13/14, A1/A2, X1/X2 …) — EPLAN同様ピン脇に小さく表示
+    sym.pins.forEach(p => {
+      if (!p.n || dev.sym === "terminal") return;
+      const isTop = p.y <= 0 || (sym.horizontalPins && p.y <= sym.bounds[1] + 2);
+      out += `<text x="${p.x + 1}" y="${p.y + (isTop ? 3.2 : -1.4)}" font-size="2.2" fill="#8a93a6" stroke="none" font-family="monospace">${escXML(p.n)}</text>`;
+    });
     out += `</g>`;
     // タグ・機能テキスト (回転に追従させず水平表示)
     out += devLabelsSVG(dev, sym);
@@ -235,34 +258,45 @@ function devLabelsSVG(dev, sym) {
   if (dev.desc) {
     out += `<text x="${labelX}" y="${labelYc + (tag ? 3.4 : 0.8)}" font-size="2.8" text-anchor="end" fill="${INK_SOFT}">${escXML(dev.desc)}</text>`;
   }
-  // リンク接点のクロスリファレンス (親コイル位置)
+  // リンク接点のクロスリファレンス (親コイル位置 /ページ.列)
   if (dev.linkTo) {
     const f = findDevice(dev.linkTo);
     if (f) {
-      out += `<text x="${b.x + b.w + 2}" y="${labelYc + 1}" font-size="2.6" fill="#7a4ec2" font-family="monospace">${devLocation(f.dev)}</text>`;
+      out += `<text x="${b.x + b.w + 1.6}" y="${labelYc + 1.2}" font-size="3" fill="#7a4ec2" font-family="monospace">/${devLocation(f.dev)}</text>`;
     }
   }
   return out;
 }
 
-/** コイル下の接点ミラー (EPLAN流クロスリファレンス表) */
+/** コイル下の接点ミラー (EPLAN流クロスリファレンス表)
+    0Vへの縦配線を避けて右側にオフセット。端子番号と NO/NC 種別つき */
 function mirrorSVG(coilDev) {
   const contacts = linkedContacts(coilDev);
   if (!contacts.length) return "";
-  const x = coilDev.x, y0 = coilDev.y + 24;
+  const csym0 = SYMBOLS_BY_ID[coilDev.sym];
+  // 多極デバイス (サーマル等) は極間の配線を避けて左下に表示
+  const wide = csym0.bounds[2] > 20;
+  const x = wide ? coilDev.x - 24 : coilDev.x + 3;
+  const y0 = coilDev.y + 24;
+  const MAXROWS = 4;
   let out = `<g font-family="monospace">`;
-  out += `<path d="M${x},${coilDev.y + 20} V${y0}" stroke="${INK_SOFT}" stroke-width="0.2" stroke-dasharray="1 1"/>`;
-  contacts.slice(0, 4).forEach((c, i) => {
-    const cy = y0 + i * 4.4;
+  out += `<path d="M${coilDev.x + 2.5},${coilDev.y + 21.5} L${x},${y0 - 2.5}" stroke="${INK_SOFT}" stroke-width="0.2" stroke-dasharray="1 1"/>`;
+  contacts.slice(0, MAXROWS).forEach((c, i) => {
+    const cy = y0 + i * 4.2;
     const csym = SYMBOLS_BY_ID[c.sym];
-    // ミニ接点グリフ
+    const pinLabel = (csym.pins[0].n && csym.pins[1]) ? `${csym.pins[0].n}·${csym.pins[1].n}` : "";
+    // ミニ接点グリフ (NC は横バーつき)
     if (csym.sim === "contact_nc") {
-      out += `<path d="M${x - 3.5},${cy + 1.5} h2.2 l2.6,-2.8 m0,2.8 h-0.6" stroke="${INK_SOFT}" stroke-width="0.35" fill="none"/>`;
+      out += `<path d="M${x},${cy + 1.5} h2 l2.6,-2.8 m-2.6,0 h2.6 m0,2.8 h0.8" stroke="${INK_SOFT}" stroke-width="0.35" fill="none"/>`;
     } else {
-      out += `<path d="M${x - 3.5},${cy + 1.5} h2.2 l2.6,-2.8 m0.6,2.8 h-0.6" stroke="${INK_SOFT}" stroke-width="0.35" fill="none"/>`;
+      out += `<path d="M${x},${cy + 1.5} h2 l2.6,-2.8 m0.6,2.8 h0.8" stroke="${INK_SOFT}" stroke-width="0.35" fill="none"/>`;
     }
-    out += `<text x="${x + 2.6}" y="${cy + 2.4}" font-size="2.6" fill="${INK_SOFT}">${devLocation(c)}</text>`;
+    out += `<text x="${x + 7}" y="${cy + 2.3}" font-size="2.4" fill="${INK_SOFT}">${pinLabel}</text>`;
+    out += `<text x="${x + 15}" y="${cy + 2.3}" font-size="2.6" fill="#7a4ec2">/${devLocation(c)}</text>`;
   });
+  if (contacts.length > MAXROWS) {
+    out += `<text x="${x}" y="${y0 + MAXROWS * 4.2 + 2}" font-size="2.4" fill="${INK_SOFT}">+${contacts.length - MAXROWS} …</text>`;
+  }
   out += `</g>`;
   return out;
 }
@@ -323,10 +357,12 @@ function overlaySVG(page) {
     out += `<g transform="translate(${g.x},${g.y}) rotate(${g.rot || 0})" opacity="0.55" style="color:${SEL}">${symBodySVG(sym, { strokeWidth: 0.55 })}</g>`;
     devPinsOf(g).forEach(p => { out += `<circle cx="${p.x}" cy="${p.y}" r="0.9" fill="${SEL}"/>`; });
   }
-  // ラバーバンド
+  // ラバーバンド (右→左ドラッグは交差選択: 緑破線)
   if (Editor.drag && Editor.drag.type === "rubber") {
     const { x0, y0, x1, y1 } = Editor.drag;
-    out += `<rect x="${Math.min(x0, x1)}" y="${Math.min(y0, y1)}" width="${Math.abs(x1 - x0)}" height="${Math.abs(y1 - y0)}" fill="rgba(31,122,224,.08)" stroke="${SEL}" stroke-width="0.35" stroke-dasharray="2 1.5"/>`;
+    const crossing = x1 < x0;
+    const color = crossing ? "#0aa64b" : SEL;
+    out += `<rect x="${Math.min(x0, x1)}" y="${Math.min(y0, y1)}" width="${Math.abs(x1 - x0)}" height="${Math.abs(y1 - y0)}" fill="${crossing ? "rgba(10,166,75,.07)" : "rgba(31,122,224,.08)"}" stroke="${color}" stroke-width="0.35" stroke-dasharray="${crossing ? "1 1.2" : "2 1.5"}"/>`;
   }
   return out;
 }
@@ -369,6 +405,12 @@ function hitTest(wx, wy) {
     }
   }
   return null;
+}
+/** 直交線分と矩形の交差判定 (交差選択用) */
+function segIntersectsRect(a, b, x0, y0, x1, y1) {
+  const sx0 = Math.min(a[0], b[0]), sx1 = Math.max(a[0], b[0]);
+  const sy0 = Math.min(a[1], b[1]), sy1 = Math.max(a[1], b[1]);
+  return sx0 <= x1 && sx1 >= x0 && sy0 <= y1 && sy1 >= y0;
 }
 function distToSeg(px, py, a, b) {
   const dx = b[0] - a[0], dy = b[1] - a[1];
@@ -421,12 +463,20 @@ function setupEditor() {
 
 function cancelDraft() {
   if (Editor.wireDraft) { Editor.wireDraft = null; requestRender(); }
-  if (Editor.ghost) { Editor.ghost = null; requestRender(); }
+  if (Editor.ghost) { Editor.ghost = null; Editor.svg.style.cursor = ""; requestRender(); }
+}
+/** 配線作図中に1頂点戻る (Backspace) */
+function wireDraftBack() {
+  const d = Editor.wireDraft;
+  if (!d) return false;
+  if (d.pts.length <= 1) { Editor.wireDraft = null; } else { d.pts.pop(); }
+  requestRender();
+  return true;
 }
 
 function onMouseDown(e) {
   const svg = Editor.svg;
-  svg.focus();
+  if (App.tool !== "text") svg.focus();
   const w = screenToWorld(e.clientX, e.clientY);
   const sx = snap(w.x), sy = snap(w.y);
 
@@ -487,6 +537,7 @@ function onMouseDown(e) {
   }
 
   if (App.tool === "text") {
+    e.preventDefault(); // SVGへのフォーカス移動で入力欄が即blurするのを防ぐ
     UI.openTextInput(e.clientX, e.clientY, sx, sy);
     return;
   }
@@ -545,6 +596,7 @@ function buildMoveAttachment() {
 
 function onMouseMove(e) {
   const w = screenToWorld(e.clientX, e.clientY);
+  Editor.lastWorld = w;
   updateStatusCoords(w);
 
   if (Editor.ghost) {
@@ -658,16 +710,23 @@ function onMouseUp(e) {
   }
   if (d.type === "rubber") {
     const page = curPage();
+    const crossing = d.x1 < d.x0; // 右→左ドラッグ = 交差選択 (AutoCAD流)
     const x0 = Math.min(d.x0, d.x1), x1 = Math.max(d.x0, d.x1);
     const y0 = Math.min(d.y0, d.y1), y1 = Math.max(d.y0, d.y1);
     if (x1 - x0 > 1 || y1 - y0 > 1) {
       if (!d.additive) App.selection.clear();
+      const rectHit = (bx, by, bw, bh) => crossing
+        ? bx < x1 && bx + bw > x0 && by < y1 && by + bh > y0        // 交差: 一部でも触れれば選択
+        : bx >= x0 && bx + bw <= x1 && by >= y0 && by + bh <= y1;   // 窓: 完全包含のみ
       page.devices.forEach(dev => {
         const b = devBounds(dev);
-        if (b.x >= x0 && b.x + b.w <= x1 && b.y >= y0 && b.y + b.h <= y1) App.selection.add(dev.id);
+        if (rectHit(b.x, b.y, b.w, b.h)) App.selection.add(dev.id);
       });
       page.wires.forEach(w => {
-        if (w.pts.every(p => p[0] >= x0 && p[0] <= x1 && p[1] >= y0 && p[1] <= y1)) App.selection.add(w.id);
+        const inside = crossing
+          ? w.pts.some((p, i) => i < w.pts.length - 1 && segIntersectsRect(p, w.pts[i + 1], x0, y0, x1, y1))
+          : w.pts.every(p => p[0] >= x0 && p[0] <= x1 && p[1] >= y0 && p[1] <= y1);
+        if (inside) App.selection.add(w.id);
       });
       page.texts.forEach(t => {
         if (t.x >= x0 && t.x <= x1 && t.y >= y0 && t.y <= y1) App.selection.add(t.id);
@@ -716,12 +775,15 @@ function finishWireDraft() {
   requestRender();
 }
 
-/* ── ゴースト配置 (ライブラリから) ── */
+/* ── ゴースト配置 (ライブラリから / 連続配置対応) ── */
 function startGhost(symId, rot = 0) {
+  if (App.sim.running) return;
+  Editor.wireDraft = null; // 作図中の配線残骸を持ち込まない
   App.tool = "select";
   UI.syncToolButtons();
   Editor.ghost = { symId, x: -1000, y: -1000, rot };
   Editor.svg.style.cursor = "copy";
+  UI.setMsg(`${SYMBOLS_BY_ID[symId].name} — クリックで連続配置 / R で回転 / Esc・右クリックで終了`);
 }
 function placeGhost() {
   const g = Editor.ghost;
@@ -730,16 +792,15 @@ function placeGhost() {
   const dev = addDevice(curPage(), g.symId, g.x, g.y, { rot: g.rot });
   App.selection.clear();
   App.selection.add(dev.id);
-  UI.setMsg(`${SYMBOLS_BY_ID[g.symId].name} ${dev.tag} を配置しました`);
-  // 連続配置: Shift 押下中は続ける
-  Editor.ghost = null;
-  Editor.svg.style.cursor = "";
+  UI.setMsg(`${SYMBOLS_BY_ID[g.symId].name} ${dev.tag || ""} を配置 — 続けてクリックで連続配置、Escで終了`);
+  // ゴーストは維持して連続配置 (EPLANの挿入モード)
   UI.showProps();
   requestRender();
 }
 
 /* ══════════════ 編集操作 ══════════════ */
 function deleteSelection() {
+  if (App.sim.running) { UI.setMsg("シミュレーション中は編集できません (Escで終了)"); return; }
   if (!App.selection.size) return;
   commit();
   const page = curPage();
@@ -757,13 +818,57 @@ function deleteSelection() {
 }
 
 function rotateSelection() {
+  if (App.sim.running) { UI.setMsg("シミュレーション中は編集できません (Escで終了)"); return; }
+  // ゴースト配置中は配置前プレビューを回転
+  if (Editor.ghost) {
+    Editor.ghost.rot = ((Editor.ghost.rot || 0) + 90) % 360;
+    requestRender();
+    return;
+  }
   const page = curPage();
   const devs = page.devices.filter(d => App.selection.has(d.id));
   if (!devs.length) return;
   commit();
-  devs.forEach(d => { d.rot = ((d.rot || 0) + 90) % 360; });
-  UI.setMsg("回転しました");
+  devs.forEach(dev => {
+    // 回転前の各ピンに接続していたワイヤ端点を記録し、回転後のピン位置へ追従させる
+    const before = devPins(dev);
+    const attached = [];
+    page.wires.forEach(wire => {
+      wire.pts.forEach((p, i) => {
+        if (i !== 0 && i !== wire.pts.length - 1) return;
+        before.forEach((pin, pi) => {
+          if (Math.abs(p[0] - pin.x) < .01 && Math.abs(p[1] - pin.y) < .01) attached.push({ wire, i, pi });
+        });
+      });
+    });
+    dev.rot = ((dev.rot || 0) + 90) % 360;
+    const after = devPins(dev);
+    attached.forEach(({ wire, i, pi }) => {
+      moveWireEndpoint(wire, i, [after[pi].x, after[pi].y]);
+    });
+  });
+  UI.setMsg("回転しました (接続配線を追従)");
   requestRender();
+}
+
+/** ワイヤ端点を np へ移し、隣接点をずらして直交を維持する */
+function moveWireEndpoint(wire, idx, np) {
+  const pts = wire.pts;
+  const old = pts[idx];
+  const adjIdx = idx === 0 ? 1 : pts.length - 2;
+  const wasVert = adjIdx >= 0 && Math.abs(old[0] - pts[adjIdx][0]) < 0.01;
+  pts[idx] = np;
+  if (adjIdx < 0 || adjIdx === idx) return;
+  const adj = pts[adjIdx];
+  if (Math.abs(np[0] - adj[0]) > 0.01 && Math.abs(np[1] - adj[1]) > 0.01) {
+    if (pts.length === 2) {
+      const mid = wasVert ? [np[0], adj[1]] : [adj[0], np[1]];
+      pts.splice(idx === 0 ? 1 : 1, 0, mid);
+    } else {
+      if (wasVert) adj[0] = np[0]; else adj[1] = np[1];
+    }
+  }
+  wire.pts = pts.filter((p, i) => i === 0 || Math.abs(p[0] - pts[i - 1][0]) > .001 || Math.abs(p[1] - pts[i - 1][1]) > .001);
 }
 
 function copySelection() {
@@ -777,47 +882,65 @@ function copySelection() {
 }
 
 function pasteClipboard() {
+  if (App.sim.running) { UI.setMsg("シミュレーション中は編集できません (Escで終了)"); return; }
   if (!App.clipboard) return;
   commit();
   const page = curPage();
   const idMap = {};
   App.selection.clear();
-  App.clipboard.devs.forEach(d0 => {
+  // 貼り付け位置: カーソル位置基準。カーソルが無効なら元位置+10mm (連続ペーストは累積)
+  const cb = App.clipboard;
+  let minX = Infinity, minY = Infinity;
+  cb.devs.forEach(d => { minX = Math.min(minX, d.x); minY = Math.min(minY, d.y); });
+  cb.wires.forEach(w => w.pts.forEach(p => { minX = Math.min(minX, p[0]); minY = Math.min(minY, p[1]); }));
+  cb.texts.forEach(t => { minX = Math.min(minX, t.x); minY = Math.min(minY, t.y); });
+  if (!isFinite(minX)) { minX = 0; minY = 0; }
+  let dx, dy;
+  const lw = Editor.lastWorld;
+  if (lw && lw.x > -20 && lw.x < SHEET.w + 20 && lw.y > -20 && lw.y < SHEET.h + 20) {
+    dx = snap(lw.x) - minX; dy = snap(lw.y) - minY;
+    if (dx === 0 && dy === 0) { dx = 10; dy = 10; } // 同位置貼り付けの完全重畳を防ぐ
+  } else {
+    cb.pasteCount = (cb.pasteCount || 0) + 1;
+    dx = 10 * cb.pasteCount; dy = 10 * cb.pasteCount;
+  }
+  cb.devs.forEach(d0 => {
     const d = deepCopy(d0);
-    idMap[d.id] = d.id = uid("d");
-    d.x += 10; d.y += 10;
+    idMap[d0.id] = d.id = uid("d");
+    d.x += dx; d.y += dy;
     page.devices.push(d);
     App.selection.add(d.id);
   });
   // linkTo の再マップ / タグ振り直し
-  App.clipboard.devs.forEach((d0, i) => {
-    const d = page.devices[page.devices.length - App.clipboard.devs.length + i];
+  cb.devs.forEach((d0, i) => {
+    const d = page.devices[page.devices.length - cb.devs.length + i];
     if (d.linkTo && idMap[d.linkTo]) d.linkTo = idMap[d.linkTo];
     if (d.tag && !d.linkTo) {
       const sym = SYMBOLS_BY_ID[d.sym];
       if (sym.letter) d.tag = nextTag(sym.letter);
     }
   });
-  App.clipboard.wires.forEach(w0 => {
+  cb.wires.forEach(w0 => {
     const w = deepCopy(w0);
     w.id = uid("w");
-    w.pts = w.pts.map(p => [p[0] + 10, p[1] + 10]);
+    w.pts = w.pts.map(p => [p[0] + dx, p[1] + dy]);
     w.num = null;
     page.wires.push(w);
     App.selection.add(w.id);
   });
-  App.clipboard.texts.forEach(t0 => {
+  cb.texts.forEach(t0 => {
     const t = deepCopy(t0);
     t.id = uid("t");
-    t.x += 10; t.y += 10;
+    t.x += dx; t.y += dy;
     page.texts.push(t);
     App.selection.add(t.id);
   });
-  UI.setMsg("貼り付けました");
+  UI.setMsg("カーソル位置に貼り付けました");
   requestRender();
 }
 
 function nudgeSelection(dx, dy) {
+  if (App.sim.running) return;
   if (!App.selection.size) return;
   commit();
   const attach = buildMoveAttachment();

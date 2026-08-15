@@ -72,7 +72,7 @@ function addDevice(page, symId, x, y, opts = {}) {
   const dev = {
     id: uid("d"), sym: symId, x: snap(x), y: snap(y), rot: opts.rot || 0,
     tag: opts.tag !== undefined ? opts.tag : (sym.letter ? nextTag(sym.letter) : ""),
-    desc: opts.desc || "", typeRef: opts.typeRef || "", linkTo: opts.linkTo || null,
+    desc: opts.desc || "", typeRef: opts.typeRef !== undefined ? opts.typeRef : (sym.typ || ""), linkTo: opts.linkTo || null,
     props: opts.props || {},
   };
   page.devices.push(dev);
@@ -181,9 +181,23 @@ function conductivePairs(dev, mode = "closed") {
     case "breaker3":
       if (mode === "open") return [];
       return (mode === "sim" && dev.props.open) ? [] : [[0, 1], [2, 3], [4, 5]];
-    case "passthru": return sym.pins.length >= 2 ? [[0, 1]] : [];
-    default: return []; // coil / load / source は導通しない(消費・供給)
+    case "passthru": return sym.pins.length >= 2 ? [[0, 1]] : []; // 端子: 線番も通す
+    case "fuse":
+      // ヒューズ: 導通するが線番は跨がない (実務では番号が変わる)
+      return mode === "open" ? [] : [[0, 1]];
+    case "passthru3":
+      // サーマルリレー主回路: 導通するが線番は跨がない (2L1 → U1)
+      return mode === "open" ? [] : [[0, 1], [2, 3], [4, 5]];
+    default: return []; // coil / load / trafo(絶縁) / source は導通しない(消費・供給)
   }
+}
+
+/** 電位リンクのタグから極性を判定 (+24V/L+ → P極, 0V/M/N → N極) */
+function linkPolarity(dev) {
+  const t = (dev.tag || "").replace(/^-/, "").toUpperCase();
+  if (["+24V", "24V", "L+", "P24"].includes(t)) return "P";
+  if (["0V", "M", "N", "-V", "GND"].includes(t)) return "N";
+  return null;
 }
 
 /**
@@ -211,7 +225,19 @@ function computeNets(page, mode = "closed") {
       });
     });
   });
-  // デバイスピン: ピン位置のノードと同一視 + 導通ペア
+  // デバイスピン: ワイヤ区間の中間に載っているピンをその区間へ接続
+  page.devices.forEach(dev => {
+    devPins(dev).forEach(pin => {
+      page.wires.forEach(w => {
+        for (let i = 0; i < w.pts.length - 1; i++) {
+          if (ptOnSeg(pin.x, pin.y, w.pts[i][0], w.pts[i][1], w.pts[i + 1][0], w.pts[i + 1][1])) {
+            uf.union(ptKey(pin.x, pin.y), ptKey(w.pts[i][0], w.pts[i][1]));
+          }
+        }
+      });
+    });
+  });
+  // デバイスの導通ペア
   page.devices.forEach(dev => {
     const pins = devPins(dev);
     conductivePairs(dev, mode).forEach(([a, b]) => {
@@ -269,7 +295,7 @@ function autoNumberWires() {
     // "open" モード: 接点・コイルを跨いで番号が伝播しない (実務どおり区間ごとに採番)
     const { pinNet, wireNet } = computeNets(page, "open");
     const netNum = new Map();
-    // 電源系ネットには電位名を付ける
+    // 1) 電源系ネット・電位リンクには電位名を付ける
     page.devices.forEach(dev => {
       const sym = SYMBOLS_BY_ID[dev.sym];
       if (sym.sim === "psu") {
@@ -277,8 +303,16 @@ function autoNumberWires() {
         if (pNet) netNum.set(pNet, "+24V");
         if (nNet) netNum.set(nNet, "0V");
       }
+      if (sym.sim === "link" && dev.tag) {
+        const net = pinNet(dev, 0);
+        if (net) netNum.set(net, dev.tag.replace(/^-/, ""));
+      }
     });
-    // ネットごとに採番し、最も長い区間を持つワイヤ1本だけにラベルを表示
+    // 2) 固定番号 (主回路の相名 L1/U1 等、手動で付けた線番) を尊重
+    page.wires.forEach(w => {
+      if (w.fixed && w.num) netNum.set(wireNet.get(w.id), w.num);
+    });
+    // 3) 残りに連番を振り、ネットごとに最長区間のワイヤ1本にだけラベルを表示
     const bestOfNet = new Map();
     page.wires.forEach(w => {
       const net = wireNet.get(w.id);
@@ -292,7 +326,7 @@ function autoNumberWires() {
       const cur = bestOfNet.get(net);
       if (!cur || maxSeg > cur.maxSeg) bestOfNet.set(net, { w, maxSeg });
     });
-    bestOfNet.forEach(({ w, maxSeg }) => { if (maxSeg >= 15) w.numShow = true; });
+    bestOfNet.forEach(({ w }) => { w.numShow = true; }); // 全ネット必ず1箇所は表示
   });
 }
 
@@ -312,64 +346,82 @@ function simActiveState(dev) {
 }
 
 /**
- * シミュレーション1ステップ: コイル励磁状態が安定するまで反復。
+ * シミュレーション1ステップ: 全ページを対象に、コイル励磁状態が安定するまで反復。
  * P極(+24V / L)到達ネットと N極(0V / N)到達ネットを求め、
- * コイル/負荷は両極にまたがれば励磁。
+ * コイル/負荷は両極にまたがれば励磁。ページを跨ぐ連動 (制御回路のコイル →
+ * 主回路の接触器) はリンク接点の状態参照で成立する。
  */
+function simSolvePage(page) {
+  const { pinNet, wireNet } = computeNets(page, "sim");
+  const pNets = new Set(), nNets = new Set(), acNets = new Set();
+  page.devices.forEach(dev => {
+    const sym = SYMBOLS_BY_ID[dev.sym];
+    if (sym.sim === "psu") {
+      const p = pinNet(dev, 2), n0 = pinNet(dev, 3);
+      if (p) pNets.add(p);
+      if (n0) nNets.add(n0);
+    }
+    if (sym.sim === "link") {
+      // 電位リンク: タグで極性を宣言 (PSUの無いページでも給電できる)
+      const pol = linkPolarity(dev);
+      const net = pinNet(dev, 0);
+      if (net && pol === "P") pNets.add(net);
+      if (net && pol === "N") nNets.add(net);
+    }
+    if (sym.sim === "source3") {
+      sym.pins.forEach((_, i) => { const net = pinNet(dev, i); if (net) acNets.add(net); });
+    }
+  });
+  let changed = false;
+  page.devices.forEach(dev => {
+    const sym = SYMBOLS_BY_ID[dev.sym];
+    let en = false;
+    if (sym.sim === "coil" || sym.sim === "load") {
+      const a = pinNet(dev, 0), b = pinNet(dev, 1);
+      en = (pNets.has(a) && nNets.has(b)) || (pNets.has(b) && nNets.has(a));
+    } else if (sym.sim === "load3") {
+      let hot = 0;
+      sym.pins.forEach((pin, i) => { if (pin.n !== "PE" && acNets.has(pinNet(dev, i))) hot++; });
+      en = hot >= 2;
+    }
+    if (sym.sim === "coil" || sym.sim === "load" || sym.sim === "load3") {
+      if (!!App.sim.states[dev.id] !== en) changed = true;
+      App.sim.states[dev.id] = en;
+    }
+  });
+  return { changed, energized: { pNets, nNets, acNets, wireNet, pinNet } };
+}
+
 function simSolve() {
-  const page = curPage();
   for (let iter = 0; iter < 24; iter++) {
-    const { pinNet, wireNet } = computeNets(page, "sim");
-    const pNets = new Set(), nNets = new Set(), acNets = new Set();
-    page.devices.forEach(dev => {
-      const sym = SYMBOLS_BY_ID[dev.sym];
-      if (sym.sim === "psu") {
-        const p = pinNet(dev, 2), n0 = pinNet(dev, 3);
-        if (p) pNets.add(p);
-        if (n0) nNets.add(n0);
-      }
-      if (sym.sim === "source3") {
-        sym.pins.forEach((_, i) => { const net = pinNet(dev, i); if (net) acNets.add(net); });
-      }
-    });
     let changed = false;
-    const newStates = {};
-    page.devices.forEach(dev => {
-      const sym = SYMBOLS_BY_ID[dev.sym];
-      let en = false;
-      if (sym.sim === "coil" || sym.sim === "load") {
-        const a = pinNet(dev, 0), b = pinNet(dev, 1);
-        en = (pNets.has(a) && nNets.has(b)) || (pNets.has(b) && nNets.has(a));
-      } else if (sym.sim === "load3") {
-        let hot = 0;
-        sym.pins.forEach((_, i) => { if (acNets.has(pinNet(dev, i))) hot++; });
-        en = hot >= 2;
-      }
-      if (sym.sim === "coil" || sym.sim === "load" || sym.sim === "load3") {
-        newStates[dev.id] = en;
-        if (!!App.sim.states[dev.id] !== en) changed = true;
-      }
+    const byPage = new Map();
+    App.project.pages.forEach(page => {
+      const r = simSolvePage(page);
+      if (r.changed) changed = true;
+      byPage.set(page.id, r.energized);
     });
-    Object.assign(App.sim.states, newStates);
-    // タイマ処理
-    updateTimers();
+    if (updateTimers()) changed = true;
     if (!changed) {
-      App.sim.energized = { pNets, nNets, acNets, wireNet, pinNet };
+      App.sim.energizedByPage = byPage;
+      App.sim.energized = byPage.get(curPage().id) || null;
       return;
     }
   }
   App.sim.energized = null;
+  App.sim.energizedByPage = null;
 }
 
 function updateTimers() {
-  const page = curPage();
   const now = performance.now();
-  page.devices.forEach(dev => {
+  let changed = false;
+  App.project.pages.forEach(page => page.devices.forEach(dev => {
     const sym = SYMBOLS_BY_ID[dev.sym];
     if (sym.sim !== "coil" || !sym.timer) return;
     const en = !!App.sim.states[dev.id];
     let t = App.sim.timers[dev.id];
     if (!t) t = App.sim.timers[dev.id] = { output: false, since: null };
+    const before = t.output;
     const delay = (parseFloat(dev.props.delay) || 2) * 1000;
     if (sym.timer === "on") {
       if (en) {
@@ -383,7 +435,9 @@ function updateTimers() {
         if ((now - t.since) >= delay) { t.output = false; t.since = null; }
       }
     }
-  });
+    if (t.output !== before) changed = true;
+  }));
+  return changed;
 }
 
 function simStart() {
@@ -400,20 +454,72 @@ function simStop() {
 }
 
 /* ══════════════ DRC (設計ルールチェック) ══════════════ */
+const DRC_RULES = [
+  "未接続ピン", "宙吊り配線端点", "デバイスタグ重複", "コイル未リンク接点",
+  "接点なしコイル", "接点数超過", "電源未到達負荷", "無開閉直結コイル", "電源短絡",
+];
+
+function drcSources(page, pinNet) {
+  const pNets = new Set(), nNets = new Set();
+  page.devices.forEach(d => {
+    const s = SYMBOLS_BY_ID[d.sym];
+    if (s.sim === "psu") { pNets.add(pinNet(d, 2)); nNets.add(pinNet(d, 3)); }
+    if (s.sim === "link") {
+      const pol = linkPolarity(d);
+      const net = pinNet(d, 0);
+      if (net && pol === "P") pNets.add(net);
+      if (net && pol === "N") nNets.add(net);
+    }
+  });
+  return { pNets, nNets };
+}
+
 function runDRC() {
   const issues = [];
   const tagSeen = new Map();
   App.project.pages.forEach(page => {
-    const { pinNet } = computeNets(page, "closed");
-    // ワイヤ端点集合
-    const wireEndpoints = new Set();
-    page.wires.forEach(w => w.pts.forEach(p => wireEndpoints.add(ptKey(p[0], p[1]))));
+    const closed = computeNets(page, "closed");
+    const open = computeNets(page, "open");
+    const srcClosed = drcSources(page, closed.pinNet);
+    const srcOpen = drcSources(page, open.pinNet);
+
+    // ワイヤ端点集合 / 区間集合
+    const wireEndpoints = new Map(); // key → count
+    page.wires.forEach(w => w.pts.forEach(p => {
+      const k = ptKey(p[0], p[1]);
+      wireEndpoints.set(k, (wireEndpoints.get(k) || 0) + 1);
+    }));
     const wireSegs = [];
-    page.wires.forEach(w => { for (let i = 0; i < w.pts.length - 1; i++) wireSegs.push([w.pts[i], w.pts[i + 1]]); });
+    page.wires.forEach(w => { for (let i = 0; i < w.pts.length - 1; i++) wireSegs.push([w.pts[i], w.pts[i + 1], w.id]); });
+    const allPins = [];
+    page.devices.forEach(d => devPins(d).forEach(p => allPins.push(p)));
+
+    // 電源短絡 (+24V と 0V が閉状態で同一ネット)
+    for (const p of srcClosed.pNets) {
+      if (p && srcClosed.nNets.has(p)) {
+        issues.push({ sev: "err", msg: "+24V と 0V が短絡しています (接点閉時)", page: page.no, target: null, loc: `${page.no}.-` });
+        break;
+      }
+    }
+
+    // 宙吊り配線端点 (ピンにも他ワイヤにも接続しない末端)。stub=意図的な引込線/レール端は除外
+    page.wires.forEach(w => {
+      if (w.stub) return;
+      [w.pts[0], w.pts[w.pts.length - 1]].forEach(ep => {
+        const k = ptKey(ep[0], ep[1]);
+        const attached =
+          (wireEndpoints.get(k) || 0) >= 2 ||
+          allPins.some(p => Math.abs(p.x - ep[0]) < .01 && Math.abs(p.y - ep[1]) < .01) ||
+          wireSegs.some(([a, b, wid]) => wid !== w.id && ptOnSeg(ep[0], ep[1], a[0], a[1], b[0], b[1]));
+        if (!attached) {
+          issues.push({ sev: "warn", msg: `配線の端点 (${ep[0]}, ${ep[1]}) がどこにも接続していません`, page: page.no, target: w.id, loc: `${page.no}.${sheetCol(ep[0])}` });
+        }
+      });
+    });
 
     page.devices.forEach(dev => {
       const sym = SYMBOLS_BY_ID[dev.sym];
-      // 1. 未接続ピン
+      // 未接続ピン
       devPins(dev).forEach(pin => {
         const onWire = wireEndpoints.has(ptKey(pin.x, pin.y)) ||
           wireSegs.some(([a, b]) => ptOnSeg(pin.x, pin.y, a[0], a[1], b[0], b[1])) ||
@@ -422,31 +528,40 @@ function runDRC() {
           issues.push({ sev: "warn", msg: `${displayTag(dev) || sym.name} のピン ${pin.name || pin.idx + 1} が未接続です`, page: page.no, target: dev.id, loc: devLocation(dev) });
         }
       });
-      // 2. タグ重複
+      // タグ重複
       if (dev.tag && !dev.linkTo) {
         if (tagSeen.has(dev.tag)) {
           issues.push({ sev: "err", msg: `デバイスタグ ${dev.tag} が重複しています`, page: page.no, target: dev.id, loc: devLocation(dev) });
         } else tagSeen.set(dev.tag, dev.id);
       }
-      // 3. リンク未設定の補助接点
+      // リンク未設定の補助接点
       if (sym.linked && !dev.linkTo) {
         issues.push({ sev: "warn", msg: `${sym.name} ${dev.tag} がコイルにリンクされていません`, page: page.no, target: dev.id, loc: devLocation(dev) });
       }
-      // 4. コイル未使用 (接点なし)
-      if (sym.sim === "coil" && sym.mirror && linkedContacts(dev).length === 0 && dev.sym !== "plc_di") {
-        issues.push({ sev: "warn", msg: `コイル ${dev.tag} に連動する接点がありません`, page: page.no, target: dev.id, loc: devLocation(dev) });
+      if (sym.mirror) {
+        const contacts = linkedContacts(dev);
+        // 接点なしコイル
+        if (sym.sim === "coil" && contacts.length === 0 && dev.sym !== "plc_di") {
+          issues.push({ sev: "warn", msg: `コイル ${dev.tag} に連動する接点がありません`, page: page.no, target: dev.id, loc: devLocation(dev) });
+        }
+        // 接点数超過 (物理リレーの接点残数)
+        const max = dev.props.maxContacts || sym.maxContacts || 4;
+        if (contacts.length > max) {
+          issues.push({ sev: "err", msg: `${dev.tag} の連動接点が ${contacts.length} 点あり、実装可能数 ${max} 点を超えています`, page: page.no, target: dev.id, loc: devLocation(dev) });
+        }
       }
-      // 5. 負荷が電源に届かない (全接点閉での静的チェック)
       if (sym.sim === "coil" || sym.sim === "load") {
-        const pNets = new Set(), nNets = new Set();
-        page.devices.forEach(d2 => {
-          const s2 = SYMBOLS_BY_ID[d2.sym];
-          if (s2.sim === "psu") { pNets.add(pinNet(d2, 2)); nNets.add(pinNet(d2, 3)); }
-        });
-        if (pNets.size) {
-          const a = pinNet(dev, 0), b = pinNet(dev, 1);
-          const ok = (pNets.has(a) && nNets.has(b)) || (pNets.has(b) && nNets.has(a));
-          if (!ok) issues.push({ sev: "err", msg: `${displayTag(dev)} が電源(+24V/0V)に接続されていません`, page: page.no, target: dev.id, loc: devLocation(dev) });
+        const a = closed.pinNet(dev, 0), b = closed.pinNet(dev, 1);
+        // 電源未到達 (全接点閉でも電源に届かない)
+        if (srcClosed.pNets.size) {
+          const ok = (srcClosed.pNets.has(a) && srcClosed.nNets.has(b)) || (srcClosed.pNets.has(b) && srcClosed.nNets.has(a));
+          if (!ok) issues.push({ sev: "err", msg: `${displayTag(dev)} が電源 (+24V/0V) に接続されていません`, page: page.no, target: dev.id, loc: devLocation(dev) });
+        }
+        // 無開閉直結 (接点を1つも介さず両極に直結 → 電源投入と同時に動作)
+        const ao = open.pinNet(dev, 0), bo = open.pinNet(dev, 1);
+        const direct = (srcOpen.pNets.has(ao) && srcOpen.nNets.has(bo)) || (srcOpen.pNets.has(bo) && srcOpen.nNets.has(ao));
+        if (direct) {
+          issues.push({ sev: "err", msg: `${displayTag(dev)} が開閉要素なしで電源間に直結しています (投入と同時に動作)`, page: page.no, target: dev.id, loc: devLocation(dev) });
         }
       }
     });
@@ -455,13 +570,16 @@ function runDRC() {
 }
 
 /* ══════════════ 部品表 (BOM) ══════════════ */
+const BOM_EXCLUDE = new Set(["link", "supply3", "earth"]); // 購買部品でないもの
 function buildBOM() {
   const rows = new Map();
   App.project.pages.forEach(page => page.devices.forEach(dev => {
     if (dev.linkTo) return; // 連動接点は親デバイスの一部
     const sym = SYMBOLS_BY_ID[dev.sym];
-    if (sym.cat === "misc" && sym.id === "link") return;
-    const key = dev.sym + "|" + (dev.typeRef || "");
+    if (BOM_EXCLUDE.has(sym.id)) return;
+    // 端子は本数だけ数える (タグ -X1:n を -X1 に集約)
+    const baseTag = sym.id === "terminal" ? (dev.tag || "-X1").split(":")[0] : null;
+    const key = sym.id === "terminal" ? "terminal|" + baseTag : dev.sym + "|" + (dev.typeRef || "");
     if (!rows.has(key)) rows.set(key, { name: sym.name, typeRef: dev.typeRef || "—", tags: [] });
     rows.get(key).tags.push(displayTag(dev) || "—");
   }));
@@ -475,6 +593,78 @@ function bomCSV() {
     rows.map(r => [esc(r.name), esc(r.typeRef), r.tags.length, esc(r.tags.join(" "))].join(",")).join("\n");
 }
 
+/** PLC アドレス一覧 */
+function buildPLCList() {
+  const rows = [];
+  App.project.pages.forEach(page => page.devices.forEach(dev => {
+    if (dev.sym === "plc_di" || dev.sym === "plc_do") {
+      rows.push({ tag: dev.tag, addr: dev.desc || "—", kind: dev.sym === "plc_di" ? "入力" : "出力", loc: devLocation(dev) });
+    }
+  }));
+  return rows.sort((a, b) => a.addr.localeCompare(b.addr));
+}
+
+/** 接続 (ワイヤ) リスト: 線番ごとに接続先デバイス:ピンを列挙 */
+function buildConnectionList() {
+  const rows = [];
+  App.project.pages.forEach(page => {
+    const { pinNet, wireNet } = computeNets(page, "open");
+    const netName = new Map();
+    page.wires.forEach(w => { if (w.num) netName.set(wireNet.get(w.id), w.num); });
+    const netPins = new Map();
+    page.devices.forEach(dev => {
+      devPins(dev).forEach(pin => {
+        const net = pinNet(dev, pin.idx);
+        if (!net) return;
+        if (!netPins.has(net)) netPins.set(net, []);
+        netPins.get(net).push(`${displayTag(dev) || SYMBOLS_BY_ID[dev.sym].name}:${pin.name || pin.idx + 1}`);
+      });
+    });
+    netPins.forEach((pins, net) => {
+      if (pins.length >= 2) rows.push({ page: page.no, num: netName.get(net) || "—", pins });
+    });
+  });
+  return rows.sort((a, b) => a.page - b.page || String(a.num).localeCompare(String(b.num), undefined, { numeric: true }));
+}
+function connectionCSV() {
+  const esc = s => `"${String(s).replace(/"/g, '""')}"`;
+  return "﻿ページ,線番,接続先\n" +
+    buildConnectionList().map(r => [r.page, esc(r.num), esc(r.pins.join(" ⇔ "))].join(",")).join("\n");
+}
+
+/** 端子表: 端子ごとの内部/外部接続 */
+function buildTerminalList() {
+  const rows = [];
+  App.project.pages.forEach(page => {
+    const { pinNet, wireNet } = computeNets(page, "open");
+    const netName = new Map();
+    page.wires.forEach(w => { if (w.num) netName.set(wireNet.get(w.id), w.num); });
+    const pinsOfNet = new Map();
+    page.devices.forEach(dev => devPins(dev).forEach(pin => {
+      const net = pinNet(dev, pin.idx);
+      if (!net) return;
+      if (!pinsOfNet.has(net)) pinsOfNet.set(net, []);
+      pinsOfNet.get(net).push({ dev, pin });
+    }));
+    page.devices.forEach(dev => {
+      if (dev.sym !== "terminal") return;
+      const side = i => {
+        const net = pinNet(dev, i);
+        const others = (pinsOfNet.get(net) || []).filter(e => e.dev !== dev)
+          .map(e => `${displayTag(e.dev) || SYMBOLS_BY_ID[e.dev.sym].name}:${e.pin.name || e.pin.idx + 1}`);
+        return { num: netName.get(net) || "", others };
+      };
+      rows.push({ tag: dev.tag || "-X?", page: page.no, a: side(0), b: side(1) });
+    });
+  });
+  return rows.sort((a, b) => String(a.tag).localeCompare(String(b.tag), undefined, { numeric: true }));
+}
+function terminalCSV() {
+  const esc = s => `"${String(s).replace(/"/g, '""')}"`;
+  return "﻿端子,ページ,内部側 線番,内部側 接続,外部側 線番,外部側 接続\n" +
+    buildTerminalList().map(r => [esc(r.tag), r.page, esc(r.a.num), esc(r.a.others.join(" ")), esc(r.b.num), esc(r.b.others.join(" "))].join(",")).join("\n");
+}
+
 /* ══════════════ 元に戻す / やり直し ══════════════ */
 function commit() {
   App.undoStack.push(JSON.stringify(App.project));
@@ -482,21 +672,33 @@ function commit() {
   App.redoStack.length = 0;
   saveLocal();
 }
+/** Undo/Redo 後も、まだ存在するオブジェクトの選択は維持する */
+function retainSelection() {
+  const alive = new Set();
+  App.project.pages.forEach(pg => {
+    pg.devices.forEach(d => alive.add(d.id));
+    pg.wires.forEach(w => alive.add(w.id));
+    pg.texts.forEach(t => alive.add(t.id));
+  });
+  [...App.selection].forEach(id => { if (!alive.has(id)) App.selection.delete(id); });
+}
 function undo() {
+  if (App.sim.running) return false;
   if (!App.undoStack.length) return false;
   App.redoStack.push(JSON.stringify(App.project));
   App.project = JSON.parse(App.undoStack.pop());
   App.pageIdx = Math.min(App.pageIdx, App.project.pages.length - 1);
-  App.selection.clear();
+  retainSelection();
   saveLocal();
   return true;
 }
 function redo() {
+  if (App.sim.running) return false;
   if (!App.redoStack.length) return false;
   App.undoStack.push(JSON.stringify(App.project));
   App.project = JSON.parse(App.redoStack.pop());
   App.pageIdx = Math.min(App.pageIdx, App.project.pages.length - 1);
-  App.selection.clear();
+  retainSelection();
   saveLocal();
   return true;
 }
