@@ -151,14 +151,14 @@ function aiGenerate(sel) {
       ctrlStartX = L.psuX + 35;
       // 安全チェーン (横型: 何点あっても縦スペースを消費しない)
       if (safeties.length) {
-        const chainY = L.topRailY + 25;
+        const chainY = L.topRailY + 15;
         addWire(page, [[L.safetyX, L.topRailY], [L.safetyX, chainY]]);
         let sx = L.safetyX;
         safeties.forEach(id => {
           addDevice(page, id, sx, chainY, { rot: 270, desc: id === "estop" ? "非常停止" : "温度異常" });
           sx += 20;
         });
-        ctrlRailY = chainY + 25;
+        ctrlRailY = chainY + 25; // = topRailY + 40 → ラング縦許容 80mm (端子込み4スロット)
         addWire(page, [[sx, chainY], [sx, ctrlRailY]]);
         page.texts.push({ id: uid("t"), x: L.safetyX, y: ctrlRailY + 5, text: "安全回路", size: 3.4, anchor: "start" });
         ctrlStartX = sx;
@@ -215,6 +215,7 @@ function aiGenerate(sel) {
 
   /* ── ラング構築 ── */
   const overflowNotes = [];
+  let termSkipped = 0;
   function buildRung(spec, retried) {
     const { series = [], startGroup = [], body, funcText = "" } = spec;
     // 図枠に収まらなければ次のシートへ
@@ -243,7 +244,10 @@ function aiGenerate(sel) {
     if (withTerm && (nSlots + 1) * 20 <= avail) {
       els = [{ id: "terminal", tag: `-X1:${termN++}`, desc: "" }, ...els];
       nSlots++;
-    } else withTerm = false;
+    } else {
+      if (withTerm) termSkipped++; // 省略した端子は無音にせず件数を報告する
+      withTerm = false;
+    }
     let pitch = 30;
     if (nSlots * 30 > avail) pitch = 25;
     if (nSlots * 25 > avail) pitch = 20;
@@ -362,7 +366,10 @@ function aiGenerate(sel) {
     coilSyms.forEach(symId => {
       let series = [];
       if (stopQueue.length) series.push({ id: stopQueue.shift(), desc: "停止" });
-      if (condQueue.length) {
+      // 運転条件センサはスロットが許す限り直列に消費する (中継リレー行きを最小化)
+      const availSlots = Math.floor((L.bodyTopY - cur.ctrlRailY - 10) / 20);
+      const condCap = Math.max(1, availSlots - 1 /*start*/ - (useTerm ? 1 : 0) - series.length);
+      for (let c = 0; c < condCap && condQueue.length; c++) {
         const cid = condQueue.shift();
         series.push({ id: cid, desc: inputDescs[cid] || "条件" });
       }
@@ -394,6 +401,7 @@ function aiGenerate(sel) {
     });
     let extra = 0;
     while (startQueue.length || condQueue.length) {
+      const isCond = !startQueue.length;
       const id = startQueue.length ? startQueue.shift() : condQueue.shift();
       const body = buildRung({
         startGroup: [{ id, desc: inputDescs[id] || "入力" }],
@@ -401,13 +409,24 @@ function aiGenerate(sel) {
       });
       regCoil(body);
       coils.push(body); extra++;
+      if (isCond) {
+        // 条件センサを中継に落とした場合、主回路の直列条件から漏れている
+        // ことを検図で必ず可視化する
+        cur.page.genWarnings = cur.page.genWarnings || [];
+        cur.page.genWarnings.push(`条件センサ ${SYMBOLS_BY_ID[id].name} (${body.tag} 経由) が運転条件に組み込まれていません — ${body.tag} の接点を主回路の直列に手動追加してください`);
+      }
     }
     if (extra) report.push(`未割付の入力 ${extra} 点に中継リレーを自動追加`);
 
-    // ── 接点需要の事前計画: 足りなければ増設リレーを先に立てる ──
+    // ── 接点需要の事前計画 ──
     const baseCoils = [...coils];
+    // 動作表示灯はコイルごとに1点を先に予約する (合計だけ見ると特定コイルが枯渇するため)
+    const lampFbReserved = [];
+    if (opts.lampFb) {
+      baseCoils.forEach(coil => { if (takeContact(coil.id)) lampFbReserved.push(coil); });
+    }
     if (coils.length) {
-      const demand = ctrlOutputs.length + (opts.lampFb ? baseCoils.length : 0);
+      const demand = ctrlOutputs.length;
       let supply = [...contactBudget.values()].reduce((a, b) => a + b, 0);
       let added = 0;
       while (demand > supply && added < 4) {
@@ -420,18 +439,34 @@ function aiGenerate(sel) {
       if (added) report.push(`接点需要が実装数を超えるため増設リレーを ${added} 台自動追加`);
     }
 
-    // ── 出力段 (接点残数を考慮してカスケード末尾側から駆動) ──
+    // ── 出力段: 機能に合った駆動源を選ぶ ──
+    //  ランプ(運転表示) → 接触器優先 / ブザー(警報) → サーマルの97-98 (過負荷警報) /
+    //  その他 → カスケード末尾
     const outNames = { lamp: "運転表示", buzzer: "警報", sol_valve: "バルブ開閉", heater: "加熱", motor1: "モータ運転" };
+    const lastContIdx = coils.map(c => c.sym).lastIndexOf("cont_coil");
+    let alarmOl = 0; // 過負荷警報に使ったサーマル数 (97-98 は各1点まで)
     let starved = 0;
     ctrlOutputs.forEach((id, i) => {
       const bodyH = id === "motor1" ? 40 : 20;
+      if (id === "buzzer" && motors3.length && alarmOl < motors3.length) {
+        // 警報ブザーは運転系ではなく過負荷警報 (サーマル 97-98) で鳴らす
+        buildRung({
+          series: [{ id: "ol_no", tag: "", linkTo: `__ol${alarmOl}__` }],
+          body: { id, h: bodyH }, funcText: "過負荷警報",
+        });
+        alarmOl++;
+        return;
+      }
       if (coils.length) {
-        const prefer = (coils.length - 1 - (i % coils.length) + coils.length) % coils.length;
+        const prefer = (id === "lamp" && lastContIdx >= 0)
+          ? lastContIdx
+          : (coils.length - 1 - (i % coils.length) + coils.length) % coils.length;
         const drv = allocDriveCoil(prefer);
         if (drv) {
+          const fn = (id === "lamp" && drv.sym !== "cont_coil" && lastContIdx >= 0) ? "動作表示" : (outNames[id] || "");
           buildRung({
             series: [{ id: driveContactFor(drv), tag: "", linkTo: drv.id }],
-            body: { id, h: bodyH }, funcText: outNames[id] || "",
+            body: { id, h: bodyH }, funcText: fn,
           });
         } else {
           // 全コイルの接点が枯渇: 超過リンクはせず、DRCで必ず可視化される警告として残す
@@ -456,21 +491,28 @@ function aiGenerate(sel) {
     if (starved) report.push(`⚠ 接点数が不足しています (${starved} 点超過) — リレーを多接点型式に変更するか中継リレーを追加してください`);
 
     if (opts.lampFb) {
-      let added = 0, skipped = 0;
-      baseCoils.forEach(coil => {
-        if (!takeContact(coil.id)) { skipped++; return; }
+      lampFbReserved.forEach(coil => {
         buildRung({
           series: [{ id: driveContactFor(coil), tag: "", linkTo: coil.id }],
           body: { id: "lamp", desc: "動作表示" }, funcText: "動作表示",
         });
-        added++;
       });
-      if (added) report.push(`動作表示灯を ${added} 灯自動追加`);
+      const skipped = baseCoils.length - lampFbReserved.length;
+      if (lampFbReserved.length) report.push(`動作表示灯を ${lampFbReserved.length} 灯自動追加`);
       if (skipped) report.push(`接点残数のないコイル ${skipped} 台は表示灯を省略 (接点数を守るため)`);
     }
   }
   if (overflowNotes.length) report.push(`スペース不足のため直列要素 ${overflowNotes.length} 点を省略しました (手動で追加してください)`);
   if (useTerm && termN > 1) report.push(`現場機器との境界に端子 -X1:1〜${termN - 1} を自動挿入`);
+  if (termSkipped) report.push(`スペース不足のため端子 ${termSkipped} 点を省略しました (必要なら手動で挿入してください)`);
+
+  // ── 空の初期ページはここで除去する ──
+  // (電位リンクの行先参照・主回路のページ番号が確定する前に再採番しないと 1 ずれる)
+  if (removeEmptyFirst) {
+    project.pages.shift();
+    project.pages.forEach((p, i) => p.no = i + 1);
+    for (let i = 0; i < pageIdxs.length; i++) pageIdxs[i]--;
+  }
 
   // ── 各シートのレールを引き、電位リンクに行先クロスリファレンスを付与 ──
   sheets.forEach((s, i) => closeSheet(s, i < sheets.length - 1));
@@ -519,11 +561,6 @@ function aiGenerate(sel) {
   }
 
   // ── 仕上げ ──
-  if (removeEmptyFirst) {
-    project.pages.shift();
-    project.pages.forEach((p, i) => p.no = i + 1);
-    for (let i = 0; i < pageIdxs.length; i++) pageIdxs[i]--;
-  }
   if (opts.autoNum !== false) {
     autoNumberWires();
     report.push("配線番号を自動付与 (接点を跨がない区間採番・主回路は相名)");

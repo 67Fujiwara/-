@@ -230,6 +230,12 @@ const SYMBOLS = [
     body: G_NC + `<path d="M-10,7 H-7 V13 H-10" transform="translate(0,0)"/><path d="M-7,10 H-3" stroke-dasharray="1.6 1.6"/>`,
   },
   {
+    id: "ol_no", cat: "power", letter: "F", name: "サーマル接点 (97-98)", nameEn: "Thermal OL contact NO",
+    desc: "過負荷時に閉じるa接点 (警報用)", linked: true, pins: [{x:0,y:0,n:"97"},{x:0,y:20,n:"98"}],
+    sim: "contact_no", bounds: [-12,-2, 15, 24],
+    body: G_NO + `<path d="M-10,7 H-7 V13 H-10"/><path d="M-7,10 H-3" stroke-dasharray="1.6 1.6"/>`,
+  },
+  {
     id: "fuse", cat: "power", letter: "F", name: "ヒューズ", nameEn: "Fuse",
     desc: "溶断保護", typ: "CP-32FM 2A", pins: [{x:0,y:0,n:"1"},{x:0,y:20,n:"2"}],
     sim: "fuse", bounds: [-5,0, 10, 20],

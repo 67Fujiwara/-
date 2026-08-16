@@ -280,8 +280,19 @@ UI.runDRC = () => {
       </div>`;
     });
   }
+  const hasGenWarn = App.project.pages.some(p => (p.genWarnings || []).length);
+  if (hasGenWarn) {
+    html += `<button class="btn-solid" id="drcClearGen" style="width:100%;margin-top:8px">生成時警告を確認済みにする (クリア)</button>`;
+  }
   pane.innerHTML = html;
   pane.querySelector("#drcRerun").addEventListener("click", UI.runDRC);
+  const clearBtn = pane.querySelector("#drcClearGen");
+  if (clearBtn) clearBtn.addEventListener("click", () => {
+    commit();
+    App.project.pages.forEach(p => { delete p.genWarnings; });
+    UI.runDRC();
+    UI.setMsg("生成時警告をクリアしました");
+  });
   pane.querySelectorAll(".drc-item").forEach(el => {
     el.addEventListener("click", () => {
       const iss = issues[+el.dataset.i];
@@ -480,8 +491,8 @@ UI.addPage = () => {
   UI.refresh();
 };
 UI.newProject = () => {
-  if (App.sim.running) UI.toggleSim();
   if (!confirm("現在のプロジェクトを破棄して新規作成しますか？\n(ブラウザ保存済みデータも上書きされます)")) return;
+  if (App.sim.running) UI.toggleSim(); // 確定後にのみ停止 (キャンセルは完全な無操作)
   App.project = newProject();
   App.pageIdx = 0;
   App.selection.clear();
@@ -492,7 +503,6 @@ UI.newProject = () => {
   zoomFit();
 };
 UI.openFile = () => {
-  if (App.sim.running) UI.toggleSim();
   const inp = document.createElement("input");
   inp.type = "file";
   inp.accept = ".json,.ecad.json";
@@ -504,6 +514,7 @@ UI.openFile = () => {
       try {
         const p = JSON.parse(rd.result);
         if (!p.pages) throw new Error("bad");
+        if (App.sim.running) UI.toggleSim(); // 読込確定後にのみ停止
         commit();
         App.project = p;
         App.pageIdx = 0;
@@ -836,8 +847,8 @@ UI.setupKeys = () => {
         if (Editor.wireDraft && Editor.wireDraft.pts.length >= 2) { finishWireDraft(); return; }
         break;
       case "Escape":
+        if (document.querySelector(".dropdown")) { UI.closeDropdown(); return; } // メニューだけ閉じる (sim中でも)
         if (App.sim.running) { UI.toggleSim(); return; }
-        if (document.querySelector(".dropdown")) { UI.closeDropdown(); return; } // メニューだけ閉じる
         if (Editor.wireDraft) { cancelDraft(); return; } // 1段階目: 作図キャンセル (ツール維持)
         if (Editor.ghost) { cancelDraft(); UI.setTool("select"); return; }
         App.selection.clear(); UI.showProps(); requestRender();

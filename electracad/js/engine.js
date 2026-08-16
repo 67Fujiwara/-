@@ -681,9 +681,11 @@ function buildConnectionList() {
         const net = pinNet(dev, pin.idx);
         if (!net) return;
         if (!netPins.has(net)) netPins.set(net, []);
-        netPins.get(net).push(dev.sym === "terminal"
-          ? (dev.tag || "-X?")
-          : `${displayTag(dev) || SYMBOLS_BY_ID[dev.sym].name}:${effectivePinName(dev, pin.idx) || pin.idx + 1}`);
+        const sym = SYMBOLS_BY_ID[dev.sym];
+        const label = dev.sym === "terminal" || sym.sim === "link"
+          ? (dev.tag || sym.name)
+          : `${displayTag(dev) || sym.name}:${effectivePinName(dev, pin.idx) || pin.idx + 1}`;
+        if (!netPins.get(net).includes(label)) netPins.get(net).push(label); // 端子等の重複列挙を防ぐ
       });
     });
     netPins.forEach((pins, net) => {

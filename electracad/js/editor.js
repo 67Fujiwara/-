@@ -850,6 +850,23 @@ function rotateSelection() {
     UI.setMsg("回転するデバイスを選択してください");
     return;
   }
+
+  // ── セーフティネット: 回転で DRC 指摘が増える (= 回路が壊れる) 場合は
+  //    自動で取り消して警告する。電気CADで無音の破壊は許されない。──
+  const issuesBefore = runDRC().length;
+  const snapshot = JSON.stringify(App.project);
+
+  if (devs.length === 1 && selWires.length === 0) {
+    const dev = devs[0];
+    const attached = collectAttachedEndpoints(page, [dev]);
+    commit();
+    dev.rot = ((dev.rot || 0) + 90) % 360;
+    reattachAfterTransform(page, [dev], attached);
+    if (!rotateGuard(snapshot, issuesBefore)) return;
+    UI.setMsg("回転しました (接続配線を追従)");
+    requestRender();
+    return;
+  }
   commit();
 
   if (devs.length + selWires.length > 1) {
@@ -861,6 +878,17 @@ function rotateSelection() {
     const cx = snap((minX + maxX) / 2), cy = snap((minY + maxY) / 2);
     const rot = (x, y) => [cx - (y - cy), cy + (x - cx)]; // +90° (時計回り)
     const attached = collectAttachedEndpoints(page, devs);
+    // 選択配線の端点が「選択外デバイスのピン」に乗っている場合は位置を記録し、
+    // 回転後もそのピンへ繋ぎ直す (部分選択で接続が千切れるのを防ぐ)
+    const anchors = [];
+    selWires.forEach(w => {
+      [0, w.pts.length - 1].forEach(idx => {
+        const p = w.pts[idx];
+        const anchored = page.devices.some(d => !App.selection.has(d.id) &&
+          devPins(d).some(pin => Math.abs(pin.x - p[0]) < .01 && Math.abs(pin.y - p[1]) < .01));
+        if (anchored) anchors.push({ w, isStart: idx === 0, x: p[0], y: p[1] });
+      });
+    });
     devs.forEach(d => {
       [d.x, d.y] = rot(d.x, d.y);
       d.rot = ((d.rot || 0) + 90) % 360;
@@ -869,15 +897,26 @@ function rotateSelection() {
     selTexts.forEach(t => { [t.x, t.y] = rot(t.x, t.y); });
     // 選択外の接続ワイヤ端点を新しいピン位置へ追従
     reattachAfterTransform(page, devs, attached);
-    UI.setMsg("ブロック回転しました (選択全体を +90°)");
-  } else if (devs.length === 1) {
-    const dev = devs[0];
-    const attached = collectAttachedEndpoints(page, [dev]);
-    dev.rot = ((dev.rot || 0) + 90) % 360;
-    reattachAfterTransform(page, [dev], attached);
-    UI.setMsg("回転しました (接続配線を追従)");
+    // 選択配線の固定側端点を元のピンへ戻す
+    anchors.forEach(a => moveWireEndpoint(a.w, a.isStart ? 0 : a.w.pts.length - 1, [a.x, a.y]));
+    if (!rotateGuard(snapshot, issuesBefore)) return;
+    UI.setMsg(anchors.length
+      ? "ブロック回転しました (選択外デバイスへの接続は維持)"
+      : "ブロック回転しました (選択全体を +90°)");
   }
   requestRender();
+}
+
+/** 回転後にDRC指摘が増えていたら回転自体を取り消す。true=続行可 */
+function rotateGuard(snapshot, issuesBefore) {
+  const issuesAfter = runDRC().length;
+  if (issuesAfter <= issuesBefore) return true;
+  App.project = JSON.parse(snapshot);
+  App.undoStack.pop(); // commit() で積んだ分を捨てる (取り消したので履歴に残さない)
+  retainSelection();
+  UI.setMsg("⚠ 回転すると回路の接続が壊れるため中止しました — 配線を外してから回転してください");
+  requestRender();
+  return false;
 }
 
 /** 選択デバイスのピンに乗っているワイヤ端点を記録 (選択済みワイヤは除外) */
