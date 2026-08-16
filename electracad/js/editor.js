@@ -251,6 +251,9 @@ function simDevVisual(dev, sym) {
     }
     case "load3":
       return en ? { color: "#c77b00", extra: `<circle cx="0" cy="21" r="11.5" fill="rgba(255,190,60,.28)"/>` } : {};
+    case "passthru3":
+      // サーマルリレー: トリップ中は赤系で表示
+      return App.sim.states[dev.id] ? { color: "#c23b3b" } : {};
     default: return {};
   }
 }
@@ -524,6 +527,14 @@ function onMouseDown(e) {
         }
         simSolve();
         requestRender();
+      } else if (sym.sim === "passthru3") {
+        // サーマルリレー: クリックでトリップ模擬 (95-96が開き、97-98が閉じる)
+        App.sim.states[hit.obj.id] = !App.sim.states[hit.obj.id];
+        UI.setMsg(App.sim.states[hit.obj.id]
+          ? `${hit.obj.tag} をトリップさせました (過負荷模擬)`
+          : `${hit.obj.tag} を復帰させました`);
+        simSolve();
+        requestRender();
       }
     }
     return;
@@ -637,7 +648,8 @@ function onMouseMove(e) {
       if (newHover !== Editor.hover.devId) { Editor.hover.devId = newHover; requestRender(); }
       if (App.sim.running && hit && hit.type === "device") {
         const sym = SYMBOLS_BY_ID[hit.obj.sym];
-        Editor.svg.style.cursor = ((sym.sim === "contact_no" || sym.sim === "contact_nc") && !hit.obj.linkTo) ? "pointer" : "default";
+        const clickable = ((sym.sim === "contact_no" || sym.sim === "contact_nc") && !hit.obj.linkTo) || sym.sim === "passthru3";
+        Editor.svg.style.cursor = clickable ? "pointer" : "default";
       }
     } else if (App.tool === "wire") {
       const pin = findPinNear(w.x, w.y);

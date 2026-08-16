@@ -715,9 +715,11 @@ function buildTerminalList() {
       if (!pinsOfNet.has(net)) pinsOfNet.set(net, []);
       pinsOfNet.get(net).push({ dev, pin });
     }));
-    const pinLabel = (d, idx) => d.sym === "terminal"
-      ? (d.tag || "-X?")
-      : `${displayTag(d) || SYMBOLS_BY_ID[d.sym].name}:${effectivePinName(d, idx) || idx + 1}`;
+    const pinLabel = (d, idx) => {
+      const s = SYMBOLS_BY_ID[d.sym];
+      if (d.sym === "terminal" || s.sim === "link") return d.tag || s.name;
+      return `${displayTag(d) || s.name}:${effectivePinName(d, idx) || idx + 1}`;
+    };
     page.devices.forEach(dev => {
       if (dev.sym !== "terminal") return;
       const side = i => {

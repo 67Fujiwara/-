@@ -181,7 +181,8 @@ function aiGenerate(sel) {
 
   function closeSheet(sheet, hasNext) {
     const pg = sheet.page;
-    const endX = Math.min(400, Math.max(sheet.prevRightAbs + 20, sheet.first ? 200 : 140));
+    // スナップ済みの値を使う (リンクデバイスの実配置位置と列参照を一致させる)
+    const endX = snap(Math.min(400, Math.max(sheet.prevRightAbs + 20, sheet.first ? 200 : 140)));
     sheet.endX = endX;
     if (sheet.first) {
       if (safeties.length) {
@@ -445,6 +446,7 @@ function aiGenerate(sel) {
     const outNames = { lamp: "運転表示", buzzer: "警報", sol_valve: "バルブ開閉", heater: "加熱", motor1: "モータ運転" };
     const lastContIdx = coils.map(c => c.sym).lastIndexOf("cont_coil");
     let alarmOl = 0; // 過負荷警報に使ったサーマル数 (97-98 は各1点まで)
+    const lampDriven = new Set(); // 既に運転表示灯が付いたコイル (動作表示灯の重複を防ぐ)
     let starved = 0;
     ctrlOutputs.forEach((id, i) => {
       const bodyH = id === "motor1" ? 40 : 20;
@@ -457,6 +459,11 @@ function aiGenerate(sel) {
         alarmOl++;
         return;
       }
+      if (id === "buzzer" && !motors3.length) {
+        // 警報源 (サーマル等) が構成にない: 運転状態で鳴る配線になることを検図で可視化
+        cur.page.genWarnings = cur.page.genWarnings || [];
+        cur.page.genWarnings.push("ブザーの警報源 (サーマルリレー等) が構成にありません — このままでは運転状態で鳴る配線です。警報接点に手動で繋ぎ替えてください");
+      }
       if (coils.length) {
         const prefer = (id === "lamp" && lastContIdx >= 0)
           ? lastContIdx
@@ -464,6 +471,7 @@ function aiGenerate(sel) {
         const drv = allocDriveCoil(prefer);
         if (drv) {
           const fn = (id === "lamp" && drv.sym !== "cont_coil" && lastContIdx >= 0) ? "動作表示" : (outNames[id] || "");
+          if (id === "lamp") lampDriven.add(drv.id);
           buildRung({
             series: [{ id: driveContactFor(drv), tag: "", linkTo: drv.id }],
             body: { id, h: bodyH }, funcText: fn,
@@ -491,14 +499,21 @@ function aiGenerate(sel) {
     if (starved) report.push(`⚠ 接点数が不足しています (${starved} 点超過) — リレーを多接点型式に変更するか中継リレーを追加してください`);
 
     if (opts.lampFb) {
+      let added = 0;
       lampFbReserved.forEach(coil => {
+        if (lampDriven.has(coil.id)) {
+          // 既に運転表示灯が付いているコイルには重複させず、予約した接点を返却
+          contactBudget.set(coil.id, (contactBudget.get(coil.id) || 0) + 1);
+          return;
+        }
         buildRung({
           series: [{ id: driveContactFor(coil), tag: "", linkTo: coil.id }],
           body: { id: "lamp", desc: "動作表示" }, funcText: "動作表示",
         });
+        added++;
       });
       const skipped = baseCoils.length - lampFbReserved.length;
-      if (lampFbReserved.length) report.push(`動作表示灯を ${lampFbReserved.length} 灯自動追加`);
+      if (added) report.push(`動作表示灯を ${added} 灯自動追加`);
       if (skipped) report.push(`接点残数のないコイル ${skipped} 台は表示灯を省略 (接点数を守るため)`);
     }
   }
