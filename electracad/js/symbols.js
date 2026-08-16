@@ -205,14 +205,14 @@ const SYMBOLS = [
 
   /* ══════════ 電源・保護 ══════════ */
   {
-    id: "mcb1", cat: "power", letter: "F", name: "サーキットブレーカ 1P", nameEn: "MCB 1-pole",
-    desc: "配線用遮断器", typ: "NF32-SV 1P", pins: [{x:0,y:0,n:"1"},{x:0,y:20,n:"2"}],
+    id: "mcb1", cat: "power", letter: "F", name: "配線用遮断器 (MCCB) 1P", nameEn: "MCCB 1-pole",
+    desc: "モールドケース遮断器", typ: "NF32-SV 1P", pins: [{x:0,y:0,n:"1"},{x:0,y:20,n:"2"}],
     sim: "breaker", bounds: [-9,-2, 12, 24],
     body: G_CB,
   },
   {
-    id: "mcb3", cat: "power", letter: "F", name: "サーキットブレーカ 3P", nameEn: "MCB 3-pole",
-    desc: "配線用遮断器 3極", typ: "NF63-CV 3P",
+    id: "mcb3", cat: "power", letter: "F", name: "配線用遮断器 (MCCB) 3P", nameEn: "MCCB 3-pole",
+    desc: "モールドケース遮断器 3極", typ: "NF63-CV 3P",
     pins: [{x:0,y:0,n:"1"},{x:0,y:20,n:"2"},{x:10,y:0,n:"3"},{x:10,y:20,n:"4"},{x:20,y:0,n:"5"},{x:20,y:20,n:"6"}],
     sim: "breaker3", bounds: [-8,-2, 31, 24],
     body: `<g>${G_CB}</g><g transform="translate(10,0)">${G_CB}</g><g transform="translate(20,0)">${G_CB}</g><path d="M-3,9 L17,9" stroke-dasharray="1.6 1.6"/>`,
@@ -264,8 +264,8 @@ const SYMBOLS = [
     body: `<path d="M-5,2 V6 M5,2 V6"/><path d="M-6.8,6 L-5,10 L-3.2,6 Z M3.2,6 L5,10 L6.8,6 Z" fill="currentColor"/>`,
   },
   {
-    id: "mcb2", cat: "power", letter: "F", name: "サーキットブレーカ 2P", nameEn: "MCB 2-pole",
-    desc: "配線用遮断器 2極 (単相用)", typ: "NF32-SV 2P",
+    id: "mcb2", cat: "power", letter: "F", name: "配線用遮断器 (MCCB) 2P", nameEn: "MCCB 2-pole",
+    desc: "モールドケース遮断器 2極 (単相用)", typ: "NF32-SV 2P",
     pins: [{x:0,y:0,n:"1"},{x:0,y:20,n:"2"},{x:10,y:0,n:"3"},{x:10,y:20,n:"4"}],
     sim: "breaker2", bounds: [-8,-2, 21, 24],
     body: `<g>${G_CB}</g><g transform="translate(10,0)">${G_CB}</g><path d="M-3,9 L7,9" stroke-dasharray="1.6 1.6"/>`,
@@ -285,18 +285,18 @@ const SYMBOLS = [
     body: `<g>${G_OL}</g><g transform="translate(10,0)">${G_OL}</g><rect x="-5" y="5" width="20" height="10" stroke-dasharray="2 1.6"/>`,
   },
   {
-    id: "trafo", cat: "power", letter: "T", name: "変圧器", nameEn: "Transformer",
-    desc: "制御トランス 2巻線 (JIS C 0617 巻線形)", typ: "PT-100E", horizontalPins: true,
+    id: "trafo", cat: "power", letter: "T", name: "変圧器 (シールド付)", nameEn: "Shielded transformer",
+    desc: "制御トランス 2巻線+静電シールド (JIS C 0617)", typ: "PT-100E", horizontalPins: true,
     pins: [{x:-5,y:0,n:"1"},{x:5,y:0,n:"2"},{x:-5,y:40,n:"3"},{x:5,y:40,n:"4"}],
-    sim: "trafo", bounds: [-10,0, 20, 40],
-    body: `<path d="M-5,0 V16 M5,0 V16 M-5,40 V24 M5,24 V40"/>` +
-      `<path d="M-5,16 A2.5,2.5 0 0 1 0,16 A2.5,2.5 0 0 1 5,16"/>` +   // 一次巻線 (半円コブ上向き)
-      `<path d="M-5,24 A2.5,2.5 0 0 0 0,24 A2.5,2.5 0 0 0 5,24"/>` +   // 二次巻線 (半円コブ下向き)
-      `<path d="M-8,20 H8"/>`,                                          // 鉄心 (実線)
+    sim: "trafo", bounds: [-11,0, 22, 40],
+    body: `<path d="M-5,0 V13 M5,0 V13 M-5,40 V27 M5,27 V40"/>` +
+      `<path d="M-5,13 H-7.5 A2.5,2.5 0 0 0 -2.5,13 A2.5,2.5 0 0 0 2.5,13 A2.5,2.5 0 0 0 7.5,13 H5" transform="translate(0,3)"/>` + // 一次巻線 (中央へ向くコブ3連)
+      `<path d="M-5,27 H-7.5 A2.5,2.5 0 0 1 -2.5,27 A2.5,2.5 0 0 1 2.5,27 A2.5,2.5 0 0 1 7.5,27 H5" transform="translate(0,-3)"/>` + // 二次巻線
+      `<path d="M-9,20 H9" stroke-dasharray="2.4 1.8"/>`,               // 静電シールド (破線)
   },
   {
-    id: "earth", cat: "power", letter: "E", name: "接地 (PE)", nameEn: "Earth / PE",
-    desc: "保護接地", pins: [{x:0,y:0,n:"PE"}],
+    id: "earth", cat: "power", letter: "E", name: "接地 (一般)", nameEn: "Earth",
+    desc: "一般接地 (JIS C 0617 03-02-01)。保護接地はDBの保護接地(PE)を使用", pins: [{x:0,y:0,n:"PE"}],
     sim: "none", bounds: [-7,0, 14, 12],
     body: `<path d="M0,0 V5 M-6,5 H6 M-4,8 H4 M-2,11 H2"/>`,
   },
