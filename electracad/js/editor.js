@@ -231,9 +231,11 @@ function devicesSVG(page) {
     }
     out += extra;
     out += symBodySVG(sym, { strokeWidth: 1.15 * 0.42 }); // 画面上で約0.5mm相当
+    out += `</g>`;
     // 端子番号 (13/14, A1/A2, X1/X2 …) — EPLAN同様ピン脇に表示。
     // 連動接点は同一コイル内の順位で 13/14 → 23/24 と自動採番。
     // 隣接ワイヤの線番と同名 (主回路の U1 等) なら二重表示を抑制。
+    // 回転グループの外で描くため、機器を回してもピン番号は水平を保つ。
     sym.pins.forEach((p, pi) => {
       if (!p.n || dev.sym === "terminal") return;
       const name = effectivePinName(dev, pi);
@@ -242,10 +244,11 @@ function devicesSVG(page) {
       const dupWire = page.wires.some(wr => wr.num === name &&
         wr.pts.some(pt => Math.abs(pt[0] - abs.x) < .01 && Math.abs(pt[1] - abs.y) < .01));
       if (dupWire) return;
-      const isTop = p.y <= 0 || (sym.horizontalPins && p.y <= sym.bounds[1] + 2);
-      out += `<text x="${p.x + 1}" y="${p.y + (isTop ? 3.4 : -1.6)}" font-size="2.5" fill="#8a93a6" stroke="none" font-family="monospace">${escXML(name)}</text>`;
+      const rotated = (dev.rot || 0) % 360 !== 0;
+      const isTop = !rotated && (p.y <= 0 || (sym.horizontalPins && p.y <= sym.bounds[1] + 2));
+      const tx = abs.x + 1, ty = rotated ? abs.y - 1.6 : abs.y + (isTop ? 3.4 : -1.6);
+      out += `<text x="${tx}" y="${ty}" font-size="2.5" fill="#42506a" stroke="none" font-family="monospace">${escXML(name)}</text>`;
     });
-    out += `</g>`;
     // タグ・機能テキスト (回転に追従させず水平表示)
     out += devLabelsSVG(dev, sym);
     // コイルの接点ミラー
