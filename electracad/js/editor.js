@@ -869,13 +869,17 @@ function rotateSelection() {
   }
   commit();
 
-  if (devs.length + selWires.length > 1) {
+  if (devs.length + selWires.length >= 1) {
     // ── ブロック回転: 選択全体を共通中心のまわりに +90° 回す ──
     // (デバイス個別回転では接続が壊れるため、配線・テキストも含めて座標変換する)
+    // 中心は「配置点・配線点」のバウンディングボックスから取る。回転は等長変換なので
+    // この中心は押すたびに不変になり、R×4 で平行移動ドリフトしない。
     let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
-    devs.forEach(d => { const b = devBounds(d); minX = Math.min(minX, b.x); minY = Math.min(minY, b.y); maxX = Math.max(maxX, b.x + b.w); maxY = Math.max(maxY, b.y + b.h); });
+    devs.forEach(d => { minX = Math.min(minX, d.x); minY = Math.min(minY, d.y); maxX = Math.max(maxX, d.x); maxY = Math.max(maxY, d.y); });
     selWires.forEach(w => w.pts.forEach(p => { minX = Math.min(minX, p[0]); minY = Math.min(minY, p[1]); maxX = Math.max(maxX, p[0]); maxY = Math.max(maxY, p[1]); }));
-    const cx = snap((minX + maxX) / 2), cy = snap((minY + maxY) / 2);
+    selTexts.forEach(t => { minX = Math.min(minX, t.x); minY = Math.min(minY, t.y); maxX = Math.max(maxX, t.x); maxY = Math.max(maxY, t.y); });
+    // 2.5mm 倍数の中心なら 90° 回転後もグリッドに乗る
+    const cx = Math.round((minX + maxX) / 5) * 2.5, cy = Math.round((minY + maxY) / 5) * 2.5;
     const rot = (x, y) => [cx - (y - cy), cy + (x - cx)]; // +90° (時計回り)
     const attached = collectAttachedEndpoints(page, devs);
     // 選択配線の端点が「選択外デバイスのピン」に乗っている場合は位置を記録し、
