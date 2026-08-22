@@ -30,35 +30,38 @@ function mkConn(o) {
     parts.push(o.plug
       ? `<path d="M${x + 2.6},${y - 2.2} L${x + 5.2},${y} L${x + 2.6},${y + 2.2}"/>`     // プラグ (凸)
       : `<path d="M${x + 5.2},${y - 2.2} L${x + 2.6},${y} L${x + 5.2},${y + 2.2}"/>`);   // レセプタクル (凹)
-    parts.push(`<text x="${x + 9.4}" y="${y + 0.9}" data-h="2.5" text-anchor="middle" fill="currentColor" stroke="none" font-family="monospace">${i + 1}</text>`);
+    if (!o.noNum) parts.push(`<text x="${x + 9.4}" y="${y + 0.9}" data-h="2.5" text-anchor="middle" fill="currentColor" stroke="none" font-family="monospace">${i + 1}</text>`);
   });
   const nCols = Math.ceil(o.sigs.length / per);
   const h = (rows - 1) * pitch + 8;
   for (let c = 0; c < nCols; c++) parts.push(`<rect x="${c * colGap + 2}" y="-4" width="12.8" height="${h}"/>`);
   const w = (nCols - 1) * colGap + 14.8;
   parts.push(`<text x="${w / 2}" y="-6" data-h="2.5" text-anchor="middle" fill="currentColor" stroke="none" font-family="monospace">${o.label}</text>`);
-  // 識別図 (受け口を正面から見た形) をラベルの上に細線で添える。電気的な意味は
-  // 下の接続器記号 (JIS C 0617-3) が持ち、この図は「どの規格の口か」を一目で
-  // 見分けるための説明図なので、図記号と紛れないよう細線 0.25mm で描く
-  let gTop = -8.6;
-  if (o.glyph) {
-    const gh = o.glyphH || 6;
-    const gy = -9.4 - gh / 2;                       // ラベルの上端からさらに離す
-    parts.push(`<g transform="translate(${r1(w / 2)},${r1(gy)})">${o.glyph}</g>`);
-    gTop = gy - gh / 2 - 0.6;
-  }
   // 外接矩形は他の記号と同じ作法で一様余白 2mm。ラベル幅は等幅 2.5mm の概算
-  const tw = Math.max(String(o.label).length * 2.05, o.glyphW || 0);
+  const tw = String(o.label).length * 2.05;
   const x0 = Math.min(0, w / 2 - tw / 2), x1 = Math.max(w, w / 2 + tw / 2);
-  const y0 = gTop, y1 = -4 + h;
+  const y0 = -8.6, y1 = -4 + h;
   const r = v => Math.round(v * 10) / 10;
-  // パレットの見出し用: 識別図とラベルだけを大きく映す (背の高い多極コネクタは
-  // 全体を 46px に収めると識別図が数 px に潰れ、どの口か分からなくなる)
-  const tb = Math.max(tw, o.glyphW || 0) + 2;
-  const thumbBox = o.glyph ? [r(w / 2 - tb / 2), r(gTop - 0.6), r(tb), r(-4.3 - gTop)] : null;
+  /* 識別図 (受け口を正面から見た形) は「パレットで選ぶとき」だけに使う。
+     図面の記号本体には入れない —
+     ・図記号は IEC 60617 の抽象記号であり、実物の外観図を混ぜると
+       「どこまでが規格記号か」が読めなくなる (IEC 61082-1)。混ぜてよいのは
+       図面上に凡例で説明を出せる場合だけで、本ツールに凡例欄は無い。
+     ・記号を回すと絵も回る。90°/270° では水平を保つラベル文字と重なり、
+       180° では「上下逆さまの受け口」という実在しない絵になる。
+     ・DXF は線幅を色 (レイヤ) で伝えるが、レイヤは記号単位で決まるため
+       細線 0.25mm が太線と同じペンで出る。「細線だから説明図」が成立しない。
+     ・1:2 に縮めると紙上 0.125mm となり、JIS Z 8312 の最細線 0.13mm を下回る。
+     図面上でどの口かを示すのは、ラベル (RJ45 など) と機器の機能テキスト
+     (EtherNet/IP など・デバイスごとに編集できる) の役目にする。 */
   return {
     id: o.id, db: true, group: "通信・コネクタ", cat: "db", letter: o.letter || "X",
-    ...(thumbBox ? { thumbBox } : {}),
+    ...(o.fn ? { fn: o.fn } : {}),
+    ...(o.glyph ? {
+      thumbGlyph: `<g transform="translate(0,-7)">${o.glyph}</g>` +
+        `<text x="0" y="0" data-h="2.5" text-anchor="middle" fill="currentColor" stroke="none" font-family="monospace">${o.label}</text>`,
+      thumbBox: [-7, -11.5, 14, 12.6],
+    } : {}),
     name: o.name, nameEn: o.nameEn, desc: o.desc, typ: o.typ || "",
     stdNote: o.stdNote || "接続器 (JIS C 0617-3)。極数と端子名は実機の仕様に合わせる",
     pins, sim: "none",
@@ -453,7 +456,7 @@ const DB_SYMBOLS = [
      られない。受け口を正面から見た形を細線で添えて一目で分かるようにする。
      細線 (0.25mm) にしてあるのは、これが電気的な意味を持つ図記号ではなく
      「どの規格の口か」を示す説明図だから (JIS Z 8312 の細線)。 */
-  mkConn({ id: "conn_rj45", label: "EtherNet/IP", letter: "X",
+  mkConn({ id: "conn_rj45", label: "RJ45", letter: "X", fn: "EtherNet/IP",
     name: "EtherNet/IP ポート (RJ45)", nameEn: "EtherNet/IP port (RJ45)",
     desc: "8極モジュラジャック。EtherNet/IP・PROFINET など産業用イーサネット共通。ツメ (ラッチ) 付きの受け口",
     typ: "8P8C シールド付",
@@ -481,7 +484,8 @@ const DB_SYMBOLS = [
     sigs: ["VBUS", "D-", "D+", "GND"] }),
   mkConn({ id: "conn_usb_c", label: "USB-C", letter: "X",
     name: "USB ポート (Type-C)", nameEn: "USB port Type-C",
-    desc: "電源・信号兼用。CC で向きと給電を判定 (主要端子のみ)。長円の受け口", typ: "USB Type-C",
+    desc: "電源・信号兼用。CC で向きと給電を判定。長円の受け口。実機の接点は A1〜A12 / B1〜B12 なので、主要端子を信号名だけで示す (通し番号は付けない)", typ: "USB Type-C",
+    noNum: true,
     stdNote: "接続器 (JIS C 0617-3)。上の細線は受け口の識別図で、電気的な意味は持たない",
     glyph: '<path d="M-2.7,-1.8 H2.7 A1.8,1.8 0 0 1 2.7,1.8 H-2.7 A1.8,1.8 0 0 1 -2.7,-1.8 Z" stroke-width="0.25"/>',
     glyphH: 3.6, glyphW: 9,

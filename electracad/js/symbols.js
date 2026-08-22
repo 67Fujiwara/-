@@ -630,22 +630,25 @@ function pathLengthMM(d) {
 
 /** サムネイル用SVG (ライブラリパレット / プロパティ表示用) */
 function symThumbSVG(sym, size = 46) {
-  // thumbBox がある記号は、パレットでは「見分けがつく部分」だけを大きく映す。
-  // 多極コネクタのように背の高い記号は、全体を 46px に収めると識別図が数 px に
-  // 潰れてしまい、どの規格の口かパレットで分からなくなる
-  const [bx, by, bw, bh] = sym.thumbBox || sym.bounds;
-  const pad = sym.thumbBox ? 0.4 : 3;
+  /* thumbGlyph を持つ記号は、パレットではそれだけを映す。多極コネクタは
+     図記号そのものが背高で、全体を 46px に収めると受け口の識別図が数 px に
+     潰れ、EtherNet/IP・USB・HDMI をパレットで見分けられない。
+     識別図は図面には出さない (実物の外観図を電気図記号に混ぜないため) ので、
+     ここでしか使わない */
+  const thumb = sym.thumbGlyph || null;
+  const [bx, by, bw, bh] = (thumb && sym.thumbBox) || sym.bounds;
+  const pad = thumb ? 0.4 : 3;
   const vb = `${bx - pad} ${by - pad} ${bw + pad * 2} ${bh + pad * 2}`;
   // 個別指定の線幅・破線もサムネイル倍率で拡大する (連結破線が消えないように)。
   // 破線は図面と同じ scaleSymbolGeom で「線素で始まり線素で終わる」よう補正する。
   // 文字はそのままにして、はみ出しを防ぐ。
   const k = 1.1 / symStrokeWidth(sym);
   // 破線は「線素で始まり線素で終わる」補正を最後に掛ける (倍率は先に反映させる)
-  const scaled = symResolveTextSize(sym.body, 1)
+  const scaled = symResolveTextSize(thumb || sym.body, 1)
     .replace(/stroke-width="([\d.]+)"/g, (m, v) => `stroke-width="${(parseFloat(v) * k).toFixed(3)}"`)
     .replace(/stroke-dasharray="([\d. ]+)"/g, (m, v) => `stroke-dasharray="${v.trim().split(/\s+/).map(n => (parseFloat(n) * k).toFixed(3)).join(" ")}"`);
   const body = scaleSymbolGeom(scaled, 1);
-  const clip = sym.thumbBox ? ";overflow:hidden" : "";
+  const clip = thumb ? ";overflow:hidden" : "";
   return `<svg viewBox="${vb}" width="${size}" height="${size * (bh + pad * 2) / (bw + pad * 2)}" style="max-height:100%${clip}">` +
     `<g fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">${body}</g></svg>`;
 }

@@ -1174,7 +1174,8 @@ function addDevice(page, symId, x, y, opts = {}) {
   const dev = {
     id: uid("d"), sym: symId, x: snap(x), y: snap(y), rot: opts.rot || 0,
     tag: opts.tag !== undefined ? opts.tag : (sym.letter ? nextTag(sym.letter) : ""),
-    desc: opts.desc || "", typeRef: opts.typeRef !== undefined ? opts.typeRef : (sym.typ || ""), linkTo: opts.linkTo || null,
+    desc: opts.desc !== undefined ? opts.desc : (sym.fn || ""),
+    typeRef: opts.typeRef !== undefined ? opts.typeRef : (sym.typ || ""), linkTo: opts.linkTo || null,
     props: opts.props || {},
   };
   page.devices.push(dev);
