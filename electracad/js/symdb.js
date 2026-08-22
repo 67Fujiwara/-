@@ -111,8 +111,19 @@ const DB_SYMBOLS = [
         // 7/√2 ≒ 4.95 なので、そのまま伸ばすと端点はちょうど (10, h) の格子点
         const q = +(7 / Math.SQRT2).toFixed(2);
         const xS = q, yS = +(h - 10 + q).toFixed(2);
-        return `<path d="M-7,0 A7,7 0 0 1 7,0 L7,${h - 10} A7,7 0 0 1 -7,${h - 10} Z" stroke-dasharray="6 1.5" stroke-linecap="butt"/>` +
-          `<path d="M${xS},${yS} L10,${h}"/>`;
+        // 輪郭は「端部の半円 2 つ + 直線部 2 本」を別々の path にする。
+        // 1 本の閉じた path にすると、DXF では 4 要素に割れて線種の位相が
+        // 要素ごとに振り出しに戻り、画面と納品物で破線の切れ方が食い違う。
+        // 分けておけば、どの要素も「線素で始まり線素で終わる」補正が効き、
+        // 画面と DXF がまったく同じ図になる。1 芯 (直線部 0mm) では直線部を
+        // 出さない — 長さ 0 の要素は DXF の検査 (AUDIT) でエラーになる
+        const st = h - 10;
+        const D = ` stroke-dasharray="6 1.5" stroke-linecap="butt"`;
+        let out = `<path d="M-7,0 A7,7 0 0 1 7,0"${D}/>`;
+        if (st > 0.01) out += `<path d="M7,0 L7,${st}"${D}/>`;
+        out += `<path d="M7,${st} A7,7 0 0 1 -7,${st}"${D}/>`;
+        if (st > 0.01) out += `<path d="M-7,${st} L-7,0"${D}/>`;
+        return out + `<path d="M${xS},${yS} L10,${h}"/>`;
       },
     },
   },
@@ -147,7 +158,7 @@ const DB_SYMBOLS = [
     id: "func_earth", db: true, group: "接地", jis: "02-15-02", cat: "db", letter: "E",
     name: "機能接地 (FE)", nameEn: "Functional earth", desc: "雑音のない (機能) 接地。接地記号をひし形で囲む",
     pins: [{x:0,y:0,n:""}], sim: "none", bounds: [-9,-2, 18, 20],
-    body: `<path d="M0,0 V4"/><path d="M0,4 L-7,10 L0,16 L7,10 Z"/><path d="M-3.6,8.5 H3.6 M-2.4,10.5 H2.4 M-1.2,12.5 H1.2 M0,6.5 V8.5"/>`,
+    body: `<path d="M0,0 V4"/><path d="M0,4 L-7,10 L0,16 L7,10 Z"/><path d="M0,4 V7.4 M-3.6,7.4 H3.6 M-2.4,9.8 H2.4 M-1.2,12.2 H1.2"/>`,
   },
   {
     id: "chassis_earth", db: true, group: "接地", jis: "02-15-04", cat: "db", letter: "E",
