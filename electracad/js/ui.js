@@ -1418,7 +1418,8 @@ UI.dxfImportDialog = (ents, fileName) => {
         /* 文字高さは DXF のまま (下限で持ち上げない — 図形だけ縮んで文字が
            巨大化する)。noMin で和文の最小呼びへの引き上げも避ける */
         page.texts.push({ id: uid("t"), x: X(e.x1), y: Y(e.y1), text: e.text || "",
-          size: Math.max(0.3, +((e.size || 3.5) * k).toFixed(2)), noMin: true, anchor: "start" });
+          size: Math.max(0.3, +((e.size || 3.5) * k).toFixed(2)), noMin: true,
+          anchor: e.anchor || "start" });        // 寄せは DXF の指定どおり (ずれ防止)
         nText++;
       }
     });
