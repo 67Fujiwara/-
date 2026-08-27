@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ZOOM_LEVELS } from './constants.js';
 import { useBoard } from './hooks/useBoard.js';
-import { addDays, today, toISO } from './lib/date.js';
+import { addDays, today, toISO, todayISO } from './lib/date.js';
 import { departmentsOf } from './lib/project.js';
+import { clampDays, collectDueTodos, loadAlertSettings, saveAlertSettings } from './lib/alerts.js';
 import GanttChart from './components/GanttChart.jsx';
 import ProjectDrawer from './components/ProjectDrawer.jsx';
 import CompletedPage from './components/CompletedPage.jsx';
 import DeptFilterMenu from './components/DeptFilterMenu.jsx';
 import DataTransfer from './components/DataTransfer.jsx';
 import BackupBar from './components/BackupBar.jsx';
+import DueAlert from './components/DueAlert.jsx';
 
 export default function App() {
   const {
@@ -40,6 +42,8 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null);
   const [newProjectId, setNewProjectId] = useState(null);
   const [focusTodaySignal, setFocusTodaySignal] = useState(0);
+  const [alertSettings, setAlertSettings] = useState(loadAlertSettings);
+  const [alertOpen, setAlertOpen] = useState(false);
 
   const selected = useMemo(
     () => activeProjects.find((p) => p.id === selectedId) || null,
@@ -114,6 +118,35 @@ export default function App() {
     },
     [removeProject]
   );
+
+  /* ---------- 期限が近い TODO のお知らせ ---------- */
+
+  const dueRows = useMemo(
+    () => collectDueTodos(activeProjects, alertSettings.days),
+    [activeProjects, alertSettings.days]
+  );
+
+  const updateAlertSettings = useCallback((patch) => {
+    setAlertSettings((prev) => {
+      const next = { ...prev, ...patch };
+      saveAlertSettings(next);
+      return next;
+    });
+  }, []);
+
+  // 起動時に1日1回だけ自動で開く。対象が無い日は出さない
+  const autoShown = useRef(false);
+  useEffect(() => {
+    if (autoShown.current) return;
+    autoShown.current = true;
+    const stamp = todayISO();
+    if (!alertSettings.enabled || alertSettings.lastShown === stamp) return;
+    if (collectDueTodos(activeProjects, alertSettings.days).length === 0) return;
+    setAlertOpen(true);
+    updateAlertSettings({ lastShown: stamp });
+    // 初回マウント時だけの処理なので、依存は意図的に空にしている
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const todoSummary = useMemo(() => {
     let done = 0;
@@ -202,6 +235,15 @@ export default function App() {
             <span className="muted">
               TODO 全体 {todoSummary.done}/{todoSummary.total}
             </span>
+            <button
+              type="button"
+              className={`btn btn--ghost ${dueRows.length > 0 ? 'btn--alert' : ''}`}
+              onClick={() => setAlertOpen(true)}
+              title={`期限が ${alertSettings.days} 日前以内の TODO を表示します`}
+            >
+              期限が近い TODO
+              {dueRows.length > 0 && <span className="btn__count">{dueRows.length}</span>}
+            </button>
             <button type="button" className="btn btn--primary" onClick={handleAdd}>
               ＋ プロジェクト追加
             </button>
@@ -231,6 +273,23 @@ export default function App() {
           />
         )}
       </main>
+
+      {alertOpen && (
+        <DueAlert
+          rows={dueRows}
+          days={alertSettings.days}
+          enabled={alertSettings.enabled}
+          onChangeDays={(value) => updateAlertSettings({ days: clampDays(value) })}
+          onChangeEnabled={(value) => updateAlertSettings({ enabled: value })}
+          onSelectProject={(id) => {
+            setAlertOpen(false);
+            setPage('active');
+            setSelectedId(id);
+            setNewProjectId(null);
+          }}
+          onClose={() => setAlertOpen(false)}
+        />
+      )}
 
       {selected && (
         <ProjectDrawer
