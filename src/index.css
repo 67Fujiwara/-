@@ -2233,3 +2233,24 @@ button.linkchip {
   color: var(--accent);
   letter-spacing: 0.02em;
 }
+
+.duelist__check {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+.duelist__item.is-done .duelist__text,
+.duelist__item.is-done .duelist__date,
+.duelist__item.is-done .duelist__left {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  font-weight: 400;
+}
+
+.duelist__item.is-done .duelist__dept {
+  opacity: 0.45;
+}

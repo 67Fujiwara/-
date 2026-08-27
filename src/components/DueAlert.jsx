@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { formatJP } from '../lib/date.js';
 import {
   MAX_DAYS,
@@ -18,7 +18,7 @@ function DeptTag({ dept }) {
 }
 
 /** プロジェクトごとにまとめた一覧。renderRight で右端の表示を差し替える */
-function Groups({ rows, onSelectProject, renderRight }) {
+function Groups({ rows, onSelectProject, onToggle, isDone, renderRight }) {
   return groupByProject(rows).map((group) => (
     <section className="duegroup" key={group.id}>
       <button
@@ -31,13 +31,23 @@ function Groups({ rows, onSelectProject, renderRight }) {
         {group.client && <span className="duegroup__client">{group.client}</span>}
       </button>
       <ul className="duelist">
-        {group.items.map((row) => (
-          <li className="duelist__item" key={row.key}>
-            <DeptTag dept={row.dept} />
-            <span className="duelist__text">{row.text || '（内容なし）'}</span>
-            {renderRight(row)}
-          </li>
-        ))}
+        {group.items.map((row) => {
+          const done = isDone(row);
+          return (
+            <li className={`duelist__item ${done ? 'is-done' : ''}`} key={row.key}>
+              <input
+                type="checkbox"
+                className="duelist__check"
+                checked={done}
+                title="完了にする"
+                onChange={() => onToggle(row)}
+              />
+              <DeptTag dept={row.dept} />
+              <span className="duelist__text">{row.text || '（内容なし）'}</span>
+              {renderRight(row)}
+            </li>
+          );
+        })}
       </ul>
     </section>
   ));
@@ -58,8 +68,41 @@ export default function DueAlert({
   onChangeEnabled,
   onChangeNotifyStart,
   onSelectProject,
+  onToggleTodo,
   onClose,
 }) {
+  // このポップアップで完了にした行。閉じるまでは一覧に残して、
+  // 押し間違えてもその場で戻せるようにする
+  const [completed, setCompleted] = useState([]);
+
+  const isDone = useCallback(
+    (row) => completed.some((c) => c.row.key === row.key),
+    [completed]
+  );
+
+  const toggle = useCallback(
+    (section, row) => {
+      onToggleTodo(row.projectId, row.todo.id);
+      setCompleted((prev) =>
+        prev.some((c) => c.row.key === row.key)
+          ? prev.filter((c) => c.row.key !== row.key)
+          : [...prev, { section, row }]
+      );
+    },
+    [onToggleTodo]
+  );
+
+  /** 完了にして一覧から外れた行を、元の並び順のまま戻す */
+  const withCompleted = (rows, section, order) => {
+    const extra = completed
+      .filter((c) => c.section === section && !rows.some((r) => r.key === c.row.key))
+      .map((c) => c.row);
+    if (extra.length === 0) return rows;
+    return [...rows, ...extra].sort(
+      (a, b) => order(a) - order(b) || a.projectName.localeCompare(b.projectName, 'ja')
+    );
+  };
+
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'Escape') onClose();
@@ -70,6 +113,9 @@ export default function DueAlert({
 
   const overdue = dueRows.filter((r) => r.left < 0).length;
   const total = dueRows.length + startRows.length;
+  const shownStart = withCompleted(startRows, 'start', (r) => -r.passed);
+  const shownDue = withCompleted(dueRows, 'due', (r) => r.left);
+  const nothingShown = shownStart.length + shownDue.length === 0;
 
   return (
     <div className="modal" role="dialog" aria-modal="true" aria-labelledby="duealert-title">
@@ -123,14 +169,16 @@ export default function DueAlert({
         </p>
 
         <div className="modal__body">
-          {total === 0 && <p className="muted">対象の TODO はありません。</p>}
+          {nothingShown && <p className="muted">対象の TODO はありません。</p>}
 
-          {notifyStart && startRows.length > 0 && (
+          {notifyStart && shownStart.length > 0 && (
             <>
               <h4 className="duesection">今日から始める TODO（{startRows.length}）</h4>
               <Groups
-                rows={startRows}
+                rows={shownStart}
                 onSelectProject={onSelectProject}
+                onToggle={(row) => toggle('start', row)}
+                isDone={isDone}
                 renderRight={(row) => (
                   <>
                     <span className="duelist__date">
@@ -146,12 +194,14 @@ export default function DueAlert({
             </>
           )}
 
-          {dueRows.length > 0 && (
+          {shownDue.length > 0 && (
             <>
               <h4 className="duesection">期限が近い TODO（{dueRows.length}）</h4>
               <Groups
-                rows={dueRows}
+                rows={shownDue}
                 onSelectProject={onSelectProject}
+                onToggle={(row) => toggle('due', row)}
+                isDone={isDone}
                 renderRight={(row) => (
                   <>
                     <span className="duelist__date" title={`${notifyDaysLabel(row.notifyDays)}に知らせる設定`}>

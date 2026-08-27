@@ -307,6 +307,7 @@ export default function App() {
           onChangeDays={(value) => updateAlertSettings({ days: clampDays(value) })}
           onChangeEnabled={(value) => updateAlertSettings({ enabled: value })}
           onChangeNotifyStart={(value) => updateAlertSettings({ notifyStart: value })}
+          onToggleTodo={toggleTodo}
           onSelectProject={(id) => {
             setAlertOpen(false);
             setPage('active');
