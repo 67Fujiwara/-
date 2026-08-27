@@ -4,6 +4,7 @@ import { createDepartment } from '../lib/departments.js';
 import {
   assignmentsOf,
   createId,
+  clampNotifyDays,
   createProject,
   departmentsOf,
   emptyAssignment,
@@ -98,11 +99,22 @@ export function useBoard() {
   /* ---------- TODO ---------- */
 
   const addTodo = useCallback(
-    (projectId, { text, dept = '', start = '', end = '' }) => {
+    (projectId, { text, dept = '', start = '', end = '', notifyDays = null }) => {
       const trimmed = text.trim();
       if (!trimmed) return;
       updateProject(projectId, (p) => ({
-        todos: [...p.todos, { id: createId('t'), text: trimmed, done: false, dept, start, end }],
+        todos: [
+          ...p.todos,
+          {
+            id: createId('t'),
+            text: trimmed,
+            done: false,
+            dept,
+            start,
+            end,
+            notifyDays: clampNotifyDays(notifyDays),
+          },
+        ],
       }));
     },
     [updateProject]
@@ -112,6 +124,26 @@ export function useBoard() {
     (projectId, todoId) => {
       updateProject(projectId, (p) => ({
         todos: p.todos.map((t) => (t.id === todoId ? { ...t, done: !t.done } : t)),
+      }));
+    },
+    [updateProject]
+  );
+
+  /** TODO の内容を部分的に書き換える（お知らせの日数変更など） */
+  const updateTodo = useCallback(
+    (projectId, todoId, patch) => {
+      updateProject(projectId, (p) => ({
+        todos: p.todos.map((t) =>
+          t.id === todoId
+            ? {
+                ...t,
+                ...patch,
+                ...('notifyDays' in patch
+                  ? { notifyDays: clampNotifyDays(patch.notifyDays) }
+                  : null),
+              }
+            : t
+        ),
       }));
     },
     [updateProject]
@@ -244,6 +276,7 @@ export function useBoard() {
     replaceProjects,
     addTodo,
     toggleTodo,
+    updateTodo,
     removeTodo,
     addDepartment,
     addAssignment,

@@ -24,6 +24,8 @@ export default function ProjectDrawer({
   onComplete,
   onDelete,
   onAddTodo,
+  defaultNotifyDays,
+  onUpdateTodo,
   onToggleTodo,
   onRemoveTodo,
   onAddDept,
@@ -372,8 +374,10 @@ export default function ProjectDrawer({
           <TodoList
             project={project}
             departments={departments}
+            defaultNotifyDays={defaultNotifyDays}
             onAdd={onAddTodo}
             onToggle={onToggleTodo}
+            onUpdate={onUpdateTodo}
             onRemove={onRemoveTodo}
           />
         </section>

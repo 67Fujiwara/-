@@ -7,7 +7,7 @@ import FolderLink from './FolderLink.jsx';
 import TodoList from './TodoList.jsx';
 
 /** 完了プロジェクト一覧（別ページ） */
-export default function CompletedPage({ projects, onRestore, onDelete }) {
+export default function CompletedPage({ projects, onRestore, onDelete, defaultNotifyDays }) {
   const [keyword, setKeyword] = useState('');
   const [openId, setOpenId] = useState(null);
 
@@ -140,7 +140,12 @@ export default function CompletedPage({ projects, onRestore, onDelete }) {
                       ))
                     )}
                   </div>
-                  <TodoList project={project} departments={allDepts} readOnly />
+                  <TodoList
+                    project={project}
+                    departments={allDepts}
+                    defaultNotifyDays={defaultNotifyDays}
+                    readOnly
+                  />
                 </div>
               )}
             </li>

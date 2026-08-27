@@ -90,11 +90,24 @@ export function normalizeProject(raw, fallbackDepartments = DEFAULT_DEPARTMENTS)
           // 旧スキーマの due（期限）は終了日として引き継ぐ
           start: typeof t?.start === 'string' ? t.start : '',
           end: typeof t?.end === 'string' ? t.end : typeof t?.due === 'string' ? t.due : '',
+          // 何日前に知らせるか。未設定（null）なら全体設定に従う
+          notifyDays: clampNotifyDays(t?.notifyDays),
         }))
       : [],
     completedAt: typeof raw?.completedAt === 'string' ? raw.completedAt : null,
     createdAt: raw?.createdAt || todayISO(),
   };
+}
+
+/**
+ * TODO ごとの「何日前に知らせるか」。
+ * null は「全体設定に従う」。数値は 0〜60 日に丸める。
+ */
+export function clampNotifyDays(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.min(60, Math.max(0, Math.round(n)));
 }
 
 export function clampProgress(value) {

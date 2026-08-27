@@ -3,7 +3,13 @@ import { ZOOM_LEVELS } from './constants.js';
 import { useBoard } from './hooks/useBoard.js';
 import { addDays, today, toISO, todayISO } from './lib/date.js';
 import { departmentsOf } from './lib/project.js';
-import { clampDays, collectDueTodos, loadAlertSettings, saveAlertSettings } from './lib/alerts.js';
+import {
+  clampDays,
+  collectDueTodos,
+  collectStartingTodos,
+  loadAlertSettings,
+  saveAlertSettings,
+} from './lib/alerts.js';
 import GanttChart from './components/GanttChart.jsx';
 import ProjectDrawer from './components/ProjectDrawer.jsx';
 import CompletedPage from './components/CompletedPage.jsx';
@@ -25,6 +31,7 @@ export default function App() {
     moveProjectToIndex,
     replaceProjects,
     addTodo,
+    updateTodo,
     toggleTodo,
     removeTodo,
     addDepartment,
@@ -126,6 +133,17 @@ export default function App() {
     [activeProjects, alertSettings.days]
   );
 
+  // 期限のお知らせに出ているものは、開始のお知らせには重ねて出さない
+  const startRows = useMemo(
+    () =>
+      alertSettings.notifyStart
+        ? collectStartingTodos(activeProjects, dueRows.map((r) => r.key))
+        : [],
+    [activeProjects, alertSettings.notifyStart, dueRows]
+  );
+
+  const alertCount = dueRows.length + startRows.length;
+
   const updateAlertSettings = useCallback((patch) => {
     setAlertSettings((prev) => {
       const next = { ...prev, ...patch };
@@ -141,7 +159,11 @@ export default function App() {
     autoShown.current = true;
     const stamp = todayISO();
     if (!alertSettings.enabled || alertSettings.lastShown === stamp) return;
-    if (collectDueTodos(activeProjects, alertSettings.days).length === 0) return;
+    const due = collectDueTodos(activeProjects, alertSettings.days);
+    const starting = alertSettings.notifyStart
+      ? collectStartingTodos(activeProjects, due.map((r) => r.key))
+      : [];
+    if (due.length + starting.length === 0) return;
     setAlertOpen(true);
     updateAlertSettings({ lastShown: stamp });
     // 初回マウント時だけの処理なので、依存は意図的に空にしている
@@ -237,12 +259,12 @@ export default function App() {
             </span>
             <button
               type="button"
-              className={`btn btn--ghost ${dueRows.length > 0 ? 'btn--alert' : ''}`}
+              className={`btn btn--ghost ${alertCount > 0 ? 'btn--alert' : ''}`}
               onClick={() => setAlertOpen(true)}
-              title={`期限が ${alertSettings.days} 日前以内の TODO を表示します`}
+              title="開始日が来た TODO と、期限が近い TODO を表示します"
             >
-              期限が近い TODO
-              {dueRows.length > 0 && <span className="btn__count">{dueRows.length}</span>}
+              TODO のお知らせ
+              {alertCount > 0 && <span className="btn__count">{alertCount}</span>}
             </button>
             <button type="button" className="btn btn--primary" onClick={handleAdd}>
               ＋ プロジェクト追加
@@ -270,17 +292,21 @@ export default function App() {
             projects={completedProjects}
             onRestore={restoreProject}
             onDelete={removeProject}
+            defaultNotifyDays={alertSettings.days}
           />
         )}
       </main>
 
       {alertOpen && (
         <DueAlert
-          rows={dueRows}
+          dueRows={dueRows}
+          startRows={startRows}
           days={alertSettings.days}
           enabled={alertSettings.enabled}
+          notifyStart={alertSettings.notifyStart}
           onChangeDays={(value) => updateAlertSettings({ days: clampDays(value) })}
           onChangeEnabled={(value) => updateAlertSettings({ enabled: value })}
+          onChangeNotifyStart={(value) => updateAlertSettings({ notifyStart: value })}
           onSelectProject={(id) => {
             setAlertOpen(false);
             setPage('active');
@@ -299,7 +325,9 @@ export default function App() {
           onUpdate={updateProject}
           onComplete={handleComplete}
           onDelete={handleDelete}
+          defaultNotifyDays={alertSettings.days}
           onAddTodo={addTodo}
+          onUpdateTodo={updateTodo}
           onToggleTodo={toggleTodo}
           onRemoveTodo={removeTodo}
           onAddDept={addDepartment}

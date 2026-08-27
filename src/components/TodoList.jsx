@@ -1,9 +1,31 @@
 import { useMemo, useState } from 'react';
 import { formatJP, todayISO } from '../lib/date.js';
 import { findDepartment } from '../lib/departments.js';
+import { NOTIFY_CHOICES, notifyDaysLabel } from '../lib/alerts.js';
 
 const ALL = '__all__';
 const NONE = '';
+const USE_DEFAULT = '';
+
+/** 「何日前に知らせるか」の選択欄。空＝全体設定に従う */
+function NotifySelect({ value, defaultDays, onChange, className = '', disabled = false }) {
+  return (
+    <select
+      className={`notifysel ${className}`}
+      value={value === null || value === undefined ? USE_DEFAULT : String(value)}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value === USE_DEFAULT ? null : Number(e.target.value))}
+      title="このTODOを何日前に知らせるか"
+    >
+      <option value={USE_DEFAULT}>全体設定（{notifyDaysLabel(defaultDays)}）</option>
+      {NOTIFY_CHOICES.map((c) => (
+        <option key={c.value} value={c.value}>
+          {c.label}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 /** プロジェクトごとの TODO リスト。工程タブで切り替えて表示する。 */
 export default function TodoList({
@@ -11,11 +33,13 @@ export default function TodoList({
   departments = [],
   onAdd = () => {},
   onToggle = () => {},
+  onUpdate = () => {},
   onRemove = () => {},
+  defaultNotifyDays = 3,
   readOnly = false,
 }) {
   const [activeDept, setActiveDept] = useState(() => departments[0]?.id ?? ALL);
-  const [form, setForm] = useState({ text: '', start: '', end: '' });
+  const [form, setForm] = useState({ text: '', start: '', end: '', notifyDays: null });
   const set = (patch) => setForm((prev) => ({ ...prev, ...patch }));
 
   // 工程が入れ替わって選択中のタブが無くなったら先頭に戻す
@@ -46,7 +70,8 @@ export default function TodoList({
     if (!form.text.trim()) return;
     // 「すべて」タブで追加したときは工程なしとして登録する
     onAdd(project.id, { ...form, dept: current === ALL ? NONE : current });
-    setForm({ text: '', start: '', end: '' });
+    // 続けて似たタスクを足せるよう、お知らせの設定だけ残す
+    setForm((prev) => ({ text: '', start: '', end: '', notifyDays: prev.notifyDays }));
   };
 
   const currentTab = tabs.find((t) => t.id === current);
@@ -120,6 +145,22 @@ export default function TodoList({
                     {item.start ? formatJP(item.start) : '—'} 〜 {item.end ? formatJP(item.end) : '—'}
                   </span>
                 )}
+                {item.end &&
+                  !item.done &&
+                  (readOnly ? (
+                    <span className="todo__notify">
+                      {item.notifyDays === null || item.notifyDays === undefined
+                        ? `全体設定（${notifyDaysLabel(defaultNotifyDays)}）`
+                        : notifyDaysLabel(item.notifyDays)}
+                    </span>
+                  ) : (
+                    <NotifySelect
+                      className="notifysel--sm"
+                      value={item.notifyDays}
+                      defaultDays={defaultNotifyDays}
+                      onChange={(value) => onUpdate(project.id, item.id, { notifyDays: value })}
+                    />
+                  ))}
                 {!readOnly && (
                   <button
                     type="button"
@@ -163,6 +204,17 @@ export default function TodoList({
             <button type="submit" className="btn btn--primary">
               追加
             </button>
+          </div>
+          <div className="todos__form-row todos__form-row--notify">
+            <span className="todos__form-label">お知らせ</span>
+            <NotifySelect
+              value={form.notifyDays}
+              defaultDays={defaultNotifyDays}
+              onChange={(value) => set({ notifyDays: value })}
+            />
+            <span className="muted todos__form-hint">
+              期限の何日前に知らせるか。長い作業は「1週間前」、短い作業は「当日」など
+            </span>
           </div>
           {invalidRange && <p className="warn">終了日が開始日より前です。</p>}
         </form>
