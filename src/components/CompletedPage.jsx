@@ -3,6 +3,7 @@ import { formatJP, toISO } from '../lib/date.js';
 import { assignmentsOf, departmentsOf, projectRange, todoStats } from '../lib/project.js';
 import DeptChip from './DeptChip.jsx';
 import SlackLink from './SlackLink.jsx';
+import FusionLink from './FusionLink.jsx';
 import FolderLink from './FolderLink.jsx';
 import TodoList from './TodoList.jsx';
 
@@ -59,6 +60,7 @@ export default function CompletedPage({ projects, onRestore, onDelete, defaultNo
                       {project.name}
                       <SlackLink url={project.slackUrl} />
                       <FolderLink url={project.folderUrl} />
+                      <FusionLink url={project.fusionUrl} />
                     </h3>
                     <p className="ccard__sub">
                       {project.client || '客先未設定'}

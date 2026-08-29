@@ -44,6 +44,7 @@ export function createProject(input = {}) {
     launchDate: input.launchDate || '',
     slackUrl: input.slackUrl || '',
     folderUrl: input.folderUrl || '',
+    fusionUrl: input.fusionUrl || '',
     departments,
     phases: { ...emptyPhases(departments), ...(input.phases || {}) },
     todos: input.todos || [],
@@ -79,6 +80,7 @@ export function normalizeProject(raw, fallbackDepartments = DEFAULT_DEPARTMENTS)
     launchDate: typeof raw?.launchDate === 'string' ? raw.launchDate : '',
     slackUrl: typeof raw?.slackUrl === 'string' ? raw.slackUrl : '',
     folderUrl: typeof raw?.folderUrl === 'string' ? normalizeFolderUrl(raw.folderUrl) : '',
+    fusionUrl: typeof raw?.fusionUrl === 'string' ? raw.fusionUrl : '',
     departments,
     phases,
     todos: Array.isArray(raw?.todos)

@@ -13,6 +13,7 @@ import {
 } from '../lib/project.js';
 import TodoList from './TodoList.jsx';
 import SlackLink from './SlackLink.jsx';
+import FusionLink from './FusionLink.jsx';
 import FolderLink from './FolderLink.jsx';
 
 /** 選択中プロジェクトの詳細（担当・工程・TODO）を編集するサイドパネル */
@@ -84,6 +85,7 @@ export default function ProjectDrawer({
             {project.name}
             <SlackLink url={project.slackUrl} />
             <FolderLink url={project.folderUrl} />
+            <FusionLink url={project.fusionUrl} />
           </h3>
         </div>
         <button type="button" className="iconbtn iconbtn--lg" onClick={onClose} title="閉じる（Esc）">
@@ -178,6 +180,23 @@ export default function ProjectDrawer({
                   </p>
                 )}
               </div>
+            )}
+          </label>
+          <label className="field">
+            <span>
+              Fusion のデータ
+              <span className="field__hint">共有リンクを貼り付け（https://a360.co/... など）</span>
+            </span>
+            <input
+              type="url"
+              inputMode="url"
+              className="field__url"
+              value={project.fusionUrl}
+              placeholder="https://a360.co/..."
+              onChange={(e) => onUpdate(project.id, { fusionUrl: e.target.value })}
+            />
+            {project.fusionUrl && !isSafeUrl(project.fusionUrl) && (
+              <p className="warn">http:// または https:// で始まるURLを貼り付けてください。</p>
             )}
           </label>
           <label className="field">
