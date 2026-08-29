@@ -1072,15 +1072,30 @@ textarea {
   gap: 4px;
 }
 
+/* 本文は1行目に単独で置き、日付や通知設定は2行目にまとめる。
+   横に並べると詳細パネルの幅では本文が潰れてしまうため。 */
 .todo {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  flex-direction: column;
+  gap: 3px;
   padding: 5px 6px;
   border-radius: 7px;
   border: 1px solid var(--line);
   background: var(--surface);
+}
+
+.todo__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.todo__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-left: 24px;
 }
 
 .todo.is-done {
@@ -1094,7 +1109,7 @@ textarea {
 
 .todo__main {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   flex: 1;
   min-width: 0;
@@ -1104,6 +1119,7 @@ textarea {
 .todo__main input[type='checkbox'] {
   width: 16px;
   height: 16px;
+  margin-top: 2px;
   accent-color: #22c55e;
   flex: 0 0 auto;
 }
@@ -1111,13 +1127,6 @@ textarea {
 .todo__text {
   font-size: 13px;
   overflow-wrap: anywhere;
-}
-
-.todo__tags {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex: 0 0 auto;
 }
 
 .todo__dept {
@@ -2190,11 +2199,11 @@ button.linkchip {
   font-size: 11px;
   color: var(--text-muted);
   border-color: var(--line);
-  max-width: 130px;
 }
 
 .todos__form-row--notify {
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .todos__form-label {
@@ -2202,9 +2211,9 @@ button.linkchip {
   color: var(--text-muted);
 }
 
+/* 注記は選択欄の横に押し込めず、独立した行に置く */
 .todos__form-hint {
-  flex: 1;
-  min-width: 0;
+  flex: 1 0 100%;
   font-size: 11px;
 }
 

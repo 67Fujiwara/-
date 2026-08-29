@@ -125,42 +125,17 @@ export default function TodoList({
           const dept = findDepartment(departments, item.dept);
           return (
             <li key={item.id} className={`todo ${item.done ? 'is-done' : ''}`}>
-              <label className="todo__main">
-                <input
-                  type="checkbox"
-                  checked={item.done}
-                  disabled={readOnly}
-                  onChange={() => onToggle(project.id, item.id)}
-                />
-                <span className="todo__text">{item.text}</span>
-              </label>
-              <span className="todo__tags">
-                {current === ALL && dept && (
-                  <span className="todo__dept" style={{ '--dept-color': dept.color }}>
-                    {dept.label}
-                  </span>
-                )}
-                {(item.start || item.end) && (
-                  <span className={`todo__due ${overdue ? 'is-overdue' : ''}`}>
-                    {item.start ? formatJP(item.start) : '—'} 〜 {item.end ? formatJP(item.end) : '—'}
-                  </span>
-                )}
-                {item.end &&
-                  !item.done &&
-                  (readOnly ? (
-                    <span className="todo__notify">
-                      {item.notifyDays === null || item.notifyDays === undefined
-                        ? `全体設定（${notifyDaysLabel(defaultNotifyDays)}）`
-                        : notifyDaysLabel(item.notifyDays)}
-                    </span>
-                  ) : (
-                    <NotifySelect
-                      className="notifysel--sm"
-                      value={item.notifyDays}
-                      defaultDays={defaultNotifyDays}
-                      onChange={(value) => onUpdate(project.id, item.id, { notifyDays: value })}
-                    />
-                  ))}
+              {/* 1行目は本文だけにする。日付や設定を横に並べると本文が潰れるため */}
+              <div className="todo__row">
+                <label className="todo__main">
+                  <input
+                    type="checkbox"
+                    checked={item.done}
+                    disabled={readOnly}
+                    onChange={() => onToggle(project.id, item.id)}
+                  />
+                  <span className="todo__text">{item.text}</span>
+                </label>
                 {!readOnly && (
                   <button
                     type="button"
@@ -171,7 +146,38 @@ export default function TodoList({
                     ×
                   </button>
                 )}
-              </span>
+              </div>
+              {(item.start || item.end || (dept && current === ALL)) && (
+                <div className="todo__meta">
+                  {current === ALL && dept && (
+                    <span className="todo__dept" style={{ '--dept-color': dept.color }}>
+                      {dept.label}
+                    </span>
+                  )}
+                  {(item.start || item.end) && (
+                    <span className={`todo__due ${overdue ? 'is-overdue' : ''}`}>
+                      {item.start ? formatJP(item.start) : '—'} 〜{' '}
+                      {item.end ? formatJP(item.end) : '—'}
+                    </span>
+                  )}
+                  {item.end &&
+                    !item.done &&
+                    (readOnly ? (
+                      <span className="todo__notify">
+                        {item.notifyDays === null || item.notifyDays === undefined
+                          ? `全体設定（${notifyDaysLabel(defaultNotifyDays)}）`
+                          : notifyDaysLabel(item.notifyDays)}
+                      </span>
+                    ) : (
+                      <NotifySelect
+                        className="notifysel--sm"
+                        value={item.notifyDays}
+                        defaultDays={defaultNotifyDays}
+                        onChange={(value) => onUpdate(project.id, item.id, { notifyDays: value })}
+                      />
+                    ))}
+                </div>
+              )}
             </li>
           );
         })}
@@ -213,7 +219,7 @@ export default function TodoList({
               onChange={(value) => set({ notifyDays: value })}
             />
             <span className="muted todos__form-hint">
-              期限の何日前に知らせるか。長い作業は「1週間前」、短い作業は「当日」など
+              長い作業は「1週間前」、短い作業は「当日」など。次の追加にも引き継がれます
             </span>
           </div>
           {invalidRange && <p className="warn">終了日が開始日より前です。</p>}
