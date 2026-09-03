@@ -250,13 +250,51 @@ export function phaseProgress(project, deptId) {
 }
 
 /**
- * 担当ごとの進捗。工程に TODO があればその完了率（自動、同じ工程の担当は同じ値）、
- * 無ければ担当ごとに手入力した値を使う。
+ * 工程の進捗を、期間の早い担当から順に割り当てる。
+ *
+ * 同じ工程にバーが複数あるとき、全部を同じ割合で塗るとどこまで進んだのか
+ * 分からない。そこで完了した日数分を先のバーから順に埋めていき、
+ * 前のバーが 100% になってから次のバーが伸びるようにする。
+ * 返り値は「担当ID → 進捗の割合（0〜1）」。
+ */
+function allocateDeptProgress(project, deptId, deptValue) {
+  const dated = assignmentsOf(project, deptId)
+    .filter((a) => a.start && a.end)
+    .slice()
+    .sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
+
+  const daysOf = (a) => Math.max(1, spanDays(a.start, a.end));
+  const totalDays = dated.reduce((sum, a) => sum + daysOf(a), 0);
+  // 完了とみなす日数を、工程全体の進捗から求める
+  let remaining = (totalDays * clampProgress(deptValue)) / 100;
+
+  const ratios = new Map();
+  for (const a of dated) {
+    const days = daysOf(a);
+    const filled = Math.min(days, Math.max(0, remaining));
+    remaining -= filled;
+    ratios.set(a.id, filled / days);
+  }
+  return ratios;
+}
+
+/**
+ * 担当ごとの進捗。工程に TODO があれば、その完了率を期間の早い担当から順に
+ * 割り当てる（自動）。無ければ担当ごとに手入力した値を使う。
+ *
+ * value は表示用に丸めた整数、exact は丸める前の値（全体進捗の集計に使う）。
  */
 export function assignmentProgress(project, deptId, assignment) {
   const dept = phaseProgress(project, deptId);
-  if (dept.auto) return dept;
-  return { value: clampProgress(assignment?.progress), auto: false, done: 0, total: 0 };
+  if (!dept.auto) {
+    const value = clampProgress(assignment?.progress);
+    return { value, exact: value, auto: false, done: 0, total: 0 };
+  }
+  // 期間が入っていない担当は割り当てようがないので、工程全体の値をそのまま出す
+  if (!assignment?.start || !assignment?.end) return { ...dept, exact: dept.value };
+
+  const ratio = allocateDeptProgress(project, deptId, dept.value).get(assignment.id) ?? 0;
+  return { ...dept, value: Math.round(ratio * 100), exact: ratio * 100 };
 }
 
 /** 日付が入っている担当だけを、工程とセットで返す */
@@ -298,7 +336,8 @@ export function projectProgress(project) {
   let total = 0;
   for (const { dept, assignment } of scheduled) {
     const days = Math.max(1, spanDays(assignment.start, assignment.end));
-    weighted += assignmentProgress(project, dept.id, assignment).value * days;
+    // 丸める前の値で集計する。バーごとに丸めると全体の数字がずれるため
+    weighted += assignmentProgress(project, dept.id, assignment).exact * days;
     total += days;
   }
   return total === 0 ? 0 : Math.round(weighted / total);
