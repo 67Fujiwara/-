@@ -60,6 +60,10 @@ export default function ProjectDrawer({
 
   const departments = departmentsOf(project);
   const progress = projectProgress(project);
+  // このプロジェクトで既に使われている状況を、入力の候補として出す
+  const statusSuggestions = [
+    ...new Set(departments.map((d) => (d.status || '').trim()).filter(Boolean)),
+  ];
 
   const submitDept = (event) => {
     event.preventDefault();
@@ -220,6 +224,12 @@ export default function ProjectDrawer({
             期間が重ならない限りガントの同じ列に並びます。
           </p>
 
+          <datalist id={`status-suggest-${project.id}`}>
+            {statusSuggestions.map((value) => (
+              <option key={value} value={value} />
+            ))}
+          </datalist>
+
           {departments.map((dept, index) => {
             const assignments = assignmentsOf(project, dept.id);
             const deptProg = phaseProgress(project, dept.id);
@@ -278,6 +288,17 @@ export default function ProjectDrawer({
                     </button>
                   </span>
                 </div>
+
+                <label className="phase__status">
+                  <span className="phase__sublabel">状況</span>
+                  <input
+                    type="text"
+                    value={dept.status || ''}
+                    placeholder="例）図面出図待ち、客先承認待ち"
+                    list={`status-suggest-${project.id}`}
+                    onChange={(e) => onUpdateDept(project.id, dept.id, { status: e.target.value })}
+                  />
+                </label>
 
                 {assignments.map((assignment, ai) => {
                   const prog = assignmentProgress(project, dept.id, assignment);
