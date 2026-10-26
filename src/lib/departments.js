@@ -11,7 +11,7 @@ export function nextColor(departments) {
 }
 
 export function createDepartment(departments, label = '新しい工程') {
-  return { id: createDepartmentId(), label, color: nextColor(departments), status: '' };
+  return { id: createDepartmentId(), label, color: nextColor(departments) };
 }
 
 /**
@@ -31,8 +31,6 @@ export function normalizeDepartments(list, fallbackToDefault = true) {
       id,
       label: typeof raw?.label === 'string' && raw.label.trim() ? raw.label.trim() : '無題の工程',
       color: /^#[0-9a-fA-F]{6}$/.test(raw?.color) ? raw.color : DEPT_COLOR_PALETTE[result.length % DEPT_COLOR_PALETTE.length],
-      // 今どうなっているかの手入力メモ（例：図面出図待ち）
-      status: typeof raw?.status === 'string' ? raw.status : '',
     });
   }
   if (result.length > 0) return result;

@@ -82,6 +82,13 @@ export default function CompletedPage({ projects, onRestore, onDelete, defaultNo
                   </div>
                 </div>
 
+                {project.status?.trim() && (
+                  <p className="grow__status grow__status--plain">
+                    <span className="grow__status-label">状況</span>
+                    <span className="grow__status-text">{project.status}</span>
+                  </p>
+                )}
+
                 <div className="ccard__chips">
                   {allDepts.map((dept) => (
                     <DeptChip

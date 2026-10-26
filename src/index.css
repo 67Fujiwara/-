@@ -2264,43 +2264,39 @@ button.linkchip {
   opacity: 0.45;
 }
 
-/* ---------- 工程の状況（手入力） ---------- */
+/* ---------- 現在の状況（プロジェクトに1つ・手入力） ---------- */
 
-.dept-chip__status {
-  padding: 0 6px;
-  border-radius: 999px;
-  background: #fff;
-  border: 1px solid color-mix(in srgb, var(--dept-color) 30%, white);
-  color: var(--text);
-  font-size: 10px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* 状況が入っている工程は、文字が読めるよう1行を使う */
-.dept-chip.has-status {
-  grid-column: 1 / -1;
-}
-
-.dept-chip.is-dimmed .dept-chip__status {
-  opacity: 0.6;
-}
-
-.phase__status {
+.grow__status {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 4px 0 2px;
+  margin: 0 0 4px;
+  padding-left: 26px;
+  min-width: 0;
 }
 
-.phase__status input {
-  flex: 1;
+/* 完了ページには左の順番欄が無いので、字下げしない */
+.grow__status--plain {
+  padding-left: 0;
+  margin: 0 0 8px;
+}
+
+.grow__status-label {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--text-muted);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.grow__status-text {
   min-width: 0;
-  border: 1px solid var(--line-strong);
-  border-radius: 7px;
-  padding: 4px 8px;
   font-size: 12px;
-  background: var(--surface);
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

@@ -94,6 +94,13 @@ export default function GanttRow({
           )}
         </div>
 
+        {project.status?.trim() && (
+          <p className="grow__status" title={`現在の状況: ${project.status}`}>
+            <span className="grow__status-label">状況</span>
+            <span className="grow__status-text">{project.status}</span>
+          </p>
+        )}
+
         <div className="grow__chips">
           {allDepts.map((dept) => (
             <DeptChip

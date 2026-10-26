@@ -42,6 +42,7 @@ export function createProject(input = {}) {
     client: input.client?.trim() || '',
     note: input.note?.trim() || '',
     launchDate: input.launchDate || '',
+    status: input.status?.trim() || '',
     slackUrl: input.slackUrl || '',
     folderUrl: input.folderUrl || '',
     fusionUrl: input.fusionUrl || '',
@@ -78,6 +79,14 @@ export function normalizeProject(raw, fallbackDepartments = DEFAULT_DEPARTMENTS)
     client: raw?.client || '',
     note: raw?.note || '',
     launchDate: typeof raw?.launchDate === 'string' ? raw.launchDate : '',
+    // 今どうなっているかの手入力メモ（プロジェクトに1つ）。
+    // 一時期は工程ごとに持たせていたので、その分も拾っておく
+    status:
+      typeof raw?.status === 'string' && raw.status
+        ? raw.status
+        : (Array.isArray(raw?.departments) ? raw.departments : [])
+            .map((d) => d?.status)
+            .find((v) => typeof v === 'string' && v.trim()) || '',
     slackUrl: typeof raw?.slackUrl === 'string' ? raw.slackUrl : '',
     folderUrl: typeof raw?.folderUrl === 'string' ? normalizeFolderUrl(raw.folderUrl) : '',
     fusionUrl: typeof raw?.fusionUrl === 'string' ? raw.fusionUrl : '',
