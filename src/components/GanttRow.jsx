@@ -3,6 +3,7 @@ import { formatJP, toISO } from '../lib/date.js';
 import {
   assignmentProgress,
   assignmentsOf,
+  deptProgress,
   departmentsOf,
   packAssignments,
   projectProgress,
@@ -107,6 +108,7 @@ export default function GanttRow({
               key={dept.id}
               dept={dept}
               owners={assignmentsOf(project, dept.id).map((a) => a.owner)}
+              progress={deptProgress(project, dept.id)}
               dimmed={isDimmed(dept)}
             />
           ))}

@@ -1,6 +1,12 @@
 import { useMemo, useState } from 'react';
 import { formatJP, toISO } from '../lib/date.js';
-import { assignmentsOf, departmentsOf, projectRange, todoStats } from '../lib/project.js';
+import {
+  assignmentsOf,
+  deptProgress,
+  departmentsOf,
+  projectRange,
+  todoStats,
+} from '../lib/project.js';
 import DeptChip from './DeptChip.jsx';
 import SlackLink from './SlackLink.jsx';
 import FusionLink from './FusionLink.jsx';
@@ -95,6 +101,7 @@ export default function CompletedPage({ projects, onRestore, onDelete, defaultNo
                       key={dept.id}
                       dept={dept}
                       owners={assignmentsOf(project, dept.id).map((a) => a.owner)}
+                      progress={deptProgress(project, dept.id)}
                     />
                   ))}
                 </div>

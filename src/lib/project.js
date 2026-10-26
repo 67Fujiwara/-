@@ -306,6 +306,26 @@ export function assignmentProgress(project, deptId, assignment) {
   return { ...dept, value: Math.round(ratio * 100), exact: ratio * 100 };
 }
 
+/**
+ * 工程全体の進捗（%）。
+ * TODO があればその完了率、無ければ担当ごとの手入力を日数で重みづけした平均。
+ * 左の工程バッジを、ガントのバーと同じ割合で塗るために使う。
+ */
+export function deptProgress(project, deptId) {
+  const dept = phaseProgress(project, deptId);
+  if (dept.auto) return dept.value;
+
+  let weighted = 0;
+  let total = 0;
+  for (const a of assignmentsOf(project, deptId)) {
+    // 期間が未入力の担当も、1日分として平均に入れる
+    const days = a.start && a.end ? Math.max(1, spanDays(a.start, a.end)) : 1;
+    weighted += clampProgress(a.progress) * days;
+    total += days;
+  }
+  return total === 0 ? 0 : Math.round(weighted / total);
+}
+
 /** 日付が入っている担当だけを、工程とセットで返す */
 export function scheduledAssignments(project) {
   return departmentsOf(project).flatMap((dept) =>

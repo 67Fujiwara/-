@@ -2300,3 +2300,24 @@ button.linkchip {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* 工程バッジの進捗塗り（ガントのバーと同じ配色） */
+.dept-chip {
+  position: relative;
+  overflow: hidden;
+}
+
+.dept-chip__fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--dept-color) 38%, white);
+  transition: width 0.18s ease;
+}
+
+.dept-chip__label,
+.dept-chip__owner {
+  position: relative;
+  z-index: 1;
+}
