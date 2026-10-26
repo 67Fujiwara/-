@@ -2321,3 +2321,16 @@ button.linkchip {
   position: relative;
   z-index: 1;
 }
+
+/* 塗りだけでは割合が読み取りにくいので、右端に数字も出す */
+.dept-chip__pct {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  margin-left: auto;
+  padding-left: 6px;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

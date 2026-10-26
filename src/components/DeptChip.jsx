@@ -17,6 +17,7 @@ export default function DeptChip({ dept, owners = [], progress = 0, dimmed = fal
       <span className="dept-chip__fill" style={{ width: `${pct}%` }} />
       <span className="dept-chip__label">{dept.label}</span>
       <span className="dept-chip__owner">{text}</span>
+      <span className="dept-chip__pct">{pct}%</span>
     </span>
   );
 }
