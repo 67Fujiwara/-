@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>バックアップ先の点検</title>
+    <style>
+      :root {
+        --line: #e5e7eb;
+        --muted: #6b7280;
+        --ok: #16a34a;
+        --ng: #dc2626;
+      }
+      body {
+        margin: 0;
+        padding: 24px;
+        background: #f5f7fa;
+        color: #1f2937;
+        font-family: -apple-system, 'Yu Gothic UI', 'Meiryo', system-ui, sans-serif;
+        line-height: 1.7;
+      }
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 20px 22px 26px;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 4px;
+      }
+      p.lead {
+        margin: 0 0 16px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      button {
+        font: inherit;
+        font-weight: 600;
+        border: 1px solid #1d4ed8;
+        background: #1d4ed8;
+        color: #fff;
+        border-radius: 8px;
+        padding: 8px 18px;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      #copy {
+        margin-left: 8px;
+        border-color: #d1d5db;
+        background: #fff;
+        color: #374151;
+        font-weight: 500;
+        display: none;
+      }
+      ul {
+        margin: 18px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+      li {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        padding: 7px 0;
+        border-bottom: 1px solid var(--line);
+        font-size: 13px;
+      }
+      li:last-child {
+        border-bottom: 0;
+      }
+      .mark {
+        flex: none;
+        width: 18px;
+        text-align: center;
+        font-weight: 700;
+        color: var(--muted);
+      }
+      .is-ok .mark {
+        color: var(--ok);
+      }
+      .is-ng .mark {
+        color: var(--ng);
+      }
+      .is-skip {
+        color: var(--muted);
+      }
+      .detail {
+        font-size: 12px;
+        word-break: break-all;
+      }
+      .is-ng .detail {
+        color: var(--ng);
+      }
+      #summary {
+        margin-top: 18px;
+        padding: 12px 14px;
+        border-radius: 8px;
+        font-size: 13px;
+        display: none;
+      }
+      #summary.is-ok {
+        background: #ecfdf5;
+        border: 1px solid #a7f3d0;
+      }
+      #summary.is-ng {
+        background: #fdecec;
+        border: 1px solid #f3b9b9;
+      }
+      code {
+        background: #f3f4f6;
+        padding: 0 4px;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>バックアップ先の点検</h1>
+      <p class="lead">
+        プロジェクト工程ボードの自動バックアップが失敗するとき、どの段階で止まっているかを調べます。
+        ボタンを押して<b>バックアップ先にしたいフォルダ</b>を選んでください。<br />
+        点検用のファイル（<code>_backup-check.txt</code>）を作って読み書きし、最後に削除します。
+        元からあるファイルには触りません。
+      </p>
+
+      <button id="run" type="button">フォルダを選んで点検する</button>
+      <button id="copy" type="button">結果をコピー</button>
+
+      <ul id="steps"></ul>
+      <div id="summary"></div>
+    </main>
+
+    <script>
+      const TEST_NAME = '_backup-check.txt';
+      const stepsEl = document.getElementById('steps');
+      const summaryEl = document.getElementById('summary');
+      const runBtn = document.getElementById('run');
+      const copyBtn = document.getElementById('copy');
+      let log = [];
+
+      function render(label, state, detail) {
+        const li = document.createElement('li');
+        li.className = `is-${state}`;
+        const mark = document.createElement('span');
+        mark.className = 'mark';
+        mark.textContent = state === 'ok' ? '✓' : state === 'ng' ? '×' : '—';
+        const body = document.createElement('span');
+        body.textContent = label;
+        if (detail) {
+          const d = document.createElement('div');
+          d.className = 'detail';
+          d.textContent = detail;
+          body.appendChild(d);
+        }
+        li.append(mark, body);
+        stepsEl.appendChild(li);
+        log.push(`${state.toUpperCase().padEnd(4)} ${label}${detail ? ' / ' + detail : ''}`);
+      }
+
+      function describe(err) {
+        if (!err) return '原因不明';
+        return `${err.name || 'Error'}: ${err.message || '(詳細なし)'}`;
+      }
+
+      /** 1段階だけ試す。失敗しても例外は投げず、結果を返す */
+      async function step(label, fn) {
+        try {
+          const detail = await fn();
+          render(label, 'ok', typeof detail === 'string' ? detail : '');
+          return { ok: true };
+        } catch (err) {
+          render(label, 'ng', describe(err));
+          return { ok: false, err };
+        }
+      }
+
+      function skipRest(labels) {
+        labels.forEach((l) => render(l, 'skip', '前の段階で止まったため未実行'));
+      }
+
+      function finish(ok, html) {
+        summaryEl.className = ok ? 'is-ok' : 'is-ng';
+        summaryEl.style.display = 'block';
+        summaryEl.innerHTML = html;
+        copyBtn.style.display = 'inline-block';
+        runBtn.disabled = false;
+        runBtn.textContent = 'もう一度点検する';
+      }
+
+      const ALL = [
+        'フォルダを選ぶ',
+        '書き込みの許可',
+        'フォルダの読み取り',
+        '点検ファイルの作成',
+        '書き込みの開始（createWritable）',
+        '書き込み',
+        '確定（close）',
+        '読み直し',
+        '同じ名前で上書き（毎日の動作）',
+        '後始末（点検ファイルの削除）',
+      ];
+      /** label より後の段階の名前 */
+      const after = (label) => ALL.slice(ALL.indexOf(label) + 1);
+
+      copyBtn.addEventListener('click', async () => {
+        const text = log.join('\n');
+        try {
+          await navigator.clipboard.writeText(text);
+          copyBtn.textContent = 'コピーしました';
+        } catch {
+          window.prompt('この内容をコピーして貼り付けてください', text);
+        }
+        window.setTimeout(() => {
+          copyBtn.textContent = '結果をコピー';
+        }, 3000);
+      });
+
+      runBtn.addEventListener('click', async () => {
+        stepsEl.innerHTML = '';
+        summaryEl.style.display = 'none';
+        copyBtn.style.display = 'none';
+        log = [`ブラウザ: ${navigator.userAgent}`];
+        runBtn.disabled = true;
+        runBtn.textContent = '点検中…';
+
+        if (typeof window.showDirectoryPicker !== 'function') {
+          render('この環境でフォルダ選択が使えるか', 'ng', 'showDirectoryPicker がありません');
+          skipRest(ALL);
+          finish(false, 'このブラウザでは自動バックアップが使えません。<b>Chrome か Edge</b> で開いてください。');
+          return;
+        }
+        render('この環境でフォルダ選択が使えるか', 'ok', '');
+
+        let dir;
+        const picked = await step('フォルダを選ぶ', async () => {
+          dir = await window.showDirectoryPicker({ mode: 'readwrite' });
+          return `選んだフォルダ: ${dir.name}`;
+        });
+        if (!picked.ok) {
+          skipRest(after('フォルダを選ぶ'));
+          finish(
+            false,
+            picked.err && picked.err.name === 'AbortError'
+              ? 'フォルダを選ばずに閉じました。もう一度実行して、フォルダを選んでから「フォルダーの選択」を押してください。'
+              : 'フォルダの選択そのものができませんでした。上のエラーを教えてください。'
+          );
+          return;
+        }
+
+        const perm = await step('書き込みの許可', async () => {
+          if (typeof dir.queryPermission !== 'function') return '許可の仕組みなし（そのまま書けます）';
+          let state = await dir.queryPermission({ mode: 'readwrite' });
+          if (state !== 'granted' && typeof dir.requestPermission === 'function') {
+            state = await dir.requestPermission({ mode: 'readwrite' });
+          }
+          if (state !== 'granted') throw new Error(`許可されませんでした（${state}）`);
+          return '';
+        });
+        if (!perm.ok) {
+          skipRest(after('書き込みの許可'));
+          finish(false, '書き込みの許可が下りませんでした。ダイアログで「編集を許可」を選んでください。');
+          return;
+        }
+
+        await step('フォルダの読み取り', async () => {
+          let n = 0;
+          for await (const _name of dir.keys()) {
+            n += 1;
+            if (n >= 500) break;
+          }
+          return `${n} 件のファイル／フォルダが見えました`;
+        });
+
+        let fh;
+        const made = await step('点検ファイルの作成', async () => {
+          fh = await dir.getFileHandle(TEST_NAME, { create: true });
+          return '';
+        });
+        if (!made.ok) {
+          skipRest(after('点検ファイルの作成'));
+          finish(
+            false,
+            'フォルダは見えるのに<b>ファイルを作れません</b>。書き込み禁止のフォルダか、クラウド同期ドライブ側が新規作成を受け付けていない可能性があります。ローカルのフォルダ（例：ドキュメント）でもう一度点検すると切り分けられます。'
+          );
+          return;
+        }
+
+        let writable;
+        const opened = await step('書き込みの開始（createWritable）', async () => {
+          writable = await fh.createWritable();
+          return '';
+        });
+        if (!opened.ok) {
+          skipRest(after('書き込みの開始（createWritable）'));
+          finish(
+            false,
+            'ファイルは作れるのに<b>書き込みを開始できません</b>。ブラウザは一時ファイルを作ってから差し替える方式で保存するため、クラウド同期ドライブで起きやすい症状です。ローカルのフォルダを試してください。'
+          );
+          return;
+        }
+
+        const wrote = await step('書き込み', async () => {
+          await writable.write('backup check ' + new Date().toISOString());
+          return '';
+        });
+        if (!wrote.ok) {
+          skipRest(after('書き込み'));
+          finish(false, '書き込みの途中で失敗しました。上のエラーを教えてください。');
+          return;
+        }
+
+        const closed = await step('確定（close）', async () => {
+          await writable.close();
+          return '';
+        });
+        if (!closed.ok) {
+          skipRest(after('確定（close）'));
+          finish(
+            false,
+            '書き込みを<b>確定できません</b>。ブラウザは一時ファイルを本来の名前に置き換えて保存しますが、その置き換えがこのドライブで失敗しています。クラウド同期ドライブで最も多い原因です。ローカルのフォルダを試してください。'
+          );
+          return;
+        }
+
+        await step('読み直し', async () => {
+          const text = await (await fh.getFile()).text();
+          if (!text.startsWith('backup check')) throw new Error('書いた内容と違います');
+          return `${text.length} 文字読めました`;
+        });
+
+        const over = await step('同じ名前で上書き（毎日の動作）', async () => {
+          const w = await fh.createWritable();
+          await w.write('overwrite ' + new Date().toISOString());
+          await w.close();
+          return '';
+        });
+
+        await step('後始末（点検ファイルの削除）', async () => {
+          await dir.removeEntry(TEST_NAME);
+          return '';
+        });
+
+        finish(
+          over.ok,
+          over.ok
+            ? 'このフォルダは<b>問題なく使えます</b>。アプリの赤い帯が消えない場合は、アプリ側でも同じフォルダを選び直してください。'
+            : '新規作成はできるのに<b>上書きだけが失敗</b>します。毎日のバックアップは同じ日のファイルを上書きするので、これが原因です。上のエラーを教えてください。'
+        );
+      });
+    </script>
+  </body>
+</html>

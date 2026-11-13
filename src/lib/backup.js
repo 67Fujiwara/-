@@ -108,9 +108,23 @@ export function backupFileName(iso) {
   return `project-board_${iso}.json`;
 }
 
+/**
+ * バックアップを1件書き出す。
+ * どの段階で失敗したかが分かるよう、エラーに手順名と種類を添えて投げ直す。
+ * （クラウド同期ドライブでは「作成はできるが確定できない」ことがある）
+ */
 export async function writeBackup(handle, fileName, text) {
-  const fileHandle = await handle.getFileHandle(fileName, { create: true });
-  const writable = await fileHandle.createWritable();
-  await writable.write(text);
-  await writable.close();
+  const at = async (label, fn) => {
+    try {
+      return await fn();
+    } catch (err) {
+      const detail = `${label}で失敗（${err?.name || 'Error'}: ${err?.message || '詳細なし'}）`;
+      throw new Error(detail, { cause: err });
+    }
+  };
+
+  const fileHandle = await at('ファイルの作成', () => handle.getFileHandle(fileName, { create: true }));
+  const writable = await at('書き込みの開始', () => fileHandle.createWritable());
+  await at('書き込み', () => writable.write(text));
+  await at('保存の確定', () => writable.close());
 }
