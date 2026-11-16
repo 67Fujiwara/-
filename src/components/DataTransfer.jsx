@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { toExportJson, parseImportedJson } from '../lib/storage.js';
 import { todayISO } from '../lib/date.js';
+import { downloadTextFile } from '../lib/download.js';
 
 /**
  * データの書き出し／読み込み。
@@ -17,18 +18,6 @@ export default function DataTransfer({ projects, onImport }) {
 
   // 日本語のファイル名はブラウザによって落ちるので ASCII にする
   const fileName = () => `project-board_${todayISO()}.json`;
-
-  /** ダウンロードフォルダに保存する（保存先を選べないブラウザ向けの方法） */
-  const downloadFile = (text) => {
-    const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName();
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
 
   const handleExport = async () => {
     const text = toExportJson(projects);
@@ -53,7 +42,7 @@ export default function DataTransfer({ projects, onImport }) {
       }
     }
 
-    downloadFile(text);
+    downloadTextFile(text, fileName());
     notify(`${projects.length} 件を書き出しました`);
   };
 

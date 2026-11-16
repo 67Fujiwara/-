@@ -21,7 +21,7 @@ function daysSince(iso) {
  * データはブラウザの中にしか無いので、共有フォルダなどに JSON を残しておくための機能。
  */
 export default function BackupBar({ projects }) {
-  const { status, dirName, lastAt, error, chooseFolder, grant, disable, backupNow } =
+  const { status, dirName, lastAt, error, chooseFolder, grant, disable, backupNow, downloadNow } =
     useAutoBackup(projects);
 
   if (status === 'unsupported') return null;
@@ -69,7 +69,15 @@ export default function BackupBar({ projects }) {
         <span className="backup__icon" aria-hidden="true">
           !
         </span>
-        <span className="backup__text">バックアップに失敗しました: {error}</span>
+        <span className="backup__text">
+          バックアップに失敗しました: {error}
+          <br />
+          このフォルダに書けない場合は、ローカルのフォルダを選び直すか、
+          「ダウンロードで保存」で手元に残してください。
+        </span>
+        <button type="button" className="btn btn--sm btn--primary" onClick={downloadNow}>
+          ダウンロードで保存
+        </button>
         <button type="button" className="btn btn--sm btn--ghost" onClick={backupNow}>
           再試行
         </button>

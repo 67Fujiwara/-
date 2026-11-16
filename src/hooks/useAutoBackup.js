@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { todayISO } from '../lib/date.js';
 import { hadStoredDataAtStartup, toExportJson } from '../lib/storage.js';
+import { downloadTextFile } from '../lib/download.js';
 import {
   backupFileName,
   dirPermission,
@@ -139,5 +140,14 @@ export function useAutoBackup(projects) {
 
   const backupNow = useCallback(() => runBackup({ force: true }), [runBackup]);
 
-  return { status, dirName, lastAt, error, chooseFolder, grant, disable, backupNow };
+  /**
+   * フォルダに書けないときの逃げ道。通常のダウンロードで保存する。
+   * クラウド同期ドライブはフォルダへの直接書き込みを拒むことがあるため、
+   * その場合でもバックアップを手元に残せるようにしておく。
+   */
+  const downloadNow = useCallback(() => {
+    downloadTextFile(toExportJson(projectsRef.current), backupFileName(todayISO()));
+  }, []);
+
+  return { status, dirName, lastAt, error, chooseFolder, grant, disable, backupNow, downloadNow };
 }
