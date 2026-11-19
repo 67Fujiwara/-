@@ -172,8 +172,10 @@ export default function BackupBar({ projects }) {
   }
 
   const stale = daysSince(lastAt);
+  // 選び直しに失敗したときは、正常表示のままでも気づけるようにする
+  const hasNote = Boolean(note);
   return (
-    <div className={`backup ${stale !== null && stale >= 3 ? 'backup--warn' : ''}`}>
+    <div className={`backup ${hasNote || (stale !== null && stale >= 3) ? 'backup--warn' : ''}`}>
       <span className="backup__icon backup__icon--ok" aria-hidden="true">
         ✓
       </span>
@@ -184,6 +186,7 @@ export default function BackupBar({ projects }) {
         ) : (
           lastAt && <>　最終: {formatStamp(lastAt)}</>
         )}
+        {note && <>　{note}</>}
       </span>
       <button type="button" className="btn btn--sm btn--ghost" onClick={backupNow}>
         今すぐ書き出す

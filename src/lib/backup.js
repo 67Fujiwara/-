@@ -64,23 +64,39 @@ export async function loadBackupDir() {
 /**
  * フォルダを選んでもらい、次回以降のために覚える。
  * 選べなかったときは { handle: null, reason } を返す。
- * reason には理由（AbortError など）を入れる。環境によってはブラウザ側が
- * 選択を拒むことがあり、その見分けがつかないと直しようがないため。
+ *
+ * 選択は2段階に分けている。
+ *   1. 既定（読み取り）で選んでもらう
+ *   2. そのあと書き込みの許可を求める
+ * 「選択と書き込み許可」をまとめて求めると、環境によっては
+ * その場で拒まれて AbortError になることがあるため。
+ *
+ * ブラウザに前回の場所を覚えさせる id は使わない。
+ * 覚えた先が消えていると、選択そのものが失敗し続けることがある。
  */
 export async function pickBackupDir() {
   let handle;
   try {
-    handle = await window.showDirectoryPicker({ id: 'project-board-backup', mode: 'readwrite' });
+    handle = await window.showDirectoryPicker();
   } catch (err) {
     const name = err?.name || 'Error';
     return {
       handle: null,
       reason:
         name === 'AbortError'
-          ? 'フォルダを選ばずに閉じたか、ブラウザ側が選択を受け付けませんでした（AbortError）'
-          : `${name}: ${err?.message || '詳細なし'}`,
+          ? 'フォルダ選択が完了しませんでした（AbortError）。閉じた場合のほか、ブラウザ側が受け付けないこともあります'
+          : `フォルダ選択に失敗（${name}: ${err?.message || '詳細なし'}）`,
     };
   }
+
+  const granted = await dirPermission(handle, true);
+  if (granted !== 'granted') {
+    return {
+      handle: null,
+      reason: `フォルダは選べましたが、書き込みが許可されませんでした（${granted}）`,
+    };
+  }
+
   await withStore('readwrite', (store) => store.put(handle, DIR_KEY));
   return { handle, reason: '' };
 }
