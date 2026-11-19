@@ -103,6 +103,21 @@ export async function dirPermission(handle, request = false) {
   }
 }
 
+/**
+ * 覚えているフォルダに今もたどり着けるか。
+ * フォルダの名前を変えたり移動したりすると、許可は残ったままでも
+ * 場所を見失う。その状態は選び直すまで直らないので、書く前に確かめる。
+ */
+export async function dirIsReachable(handle) {
+  if (!handle) return false;
+  try {
+    for await (const _name of handle.keys()) break;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** 日付ごとに1ファイル。同じ日に何度書いても上書きなので、無限には増えない */
 export function backupFileName(iso) {
   return `project-board_${iso}.json`;

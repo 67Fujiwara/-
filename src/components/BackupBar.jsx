@@ -27,6 +27,7 @@ export default function BackupBar({ projects }) {
     dirName,
     lastAt,
     error,
+    note,
     chooseFolder,
     grant,
     disable,
@@ -91,6 +92,31 @@ export default function BackupBar({ projects }) {
     );
   }
 
+  // フォルダの名前が変わった・移動した・消えた場合。選び直す以外に直しようがない
+  if (status === 'missing') {
+    return (
+      <div className="backup backup--error">
+        <span className="backup__icon" aria-hidden="true">
+          !
+        </span>
+        <span className="backup__text">
+          バックアップ先のフォルダ（<b>{dirName || '設定済み'}</b>）が見つかりません。
+          名前を変えた・移動した・削除した場合は、<b>選び直すまで元に戻りません</b>。
+          {note && <> 　{note}</>}
+        </span>
+        <button type="button" className="btn btn--sm btn--primary" onClick={chooseFolder}>
+          フォルダを選び直す
+        </button>
+        <button type="button" className="btn btn--sm btn--ghost" onClick={downloadNow}>
+          ダウンロードで保存
+        </button>
+        <button type="button" className="btn btn--sm btn--ghost" onClick={disable}>
+          停止
+        </button>
+      </div>
+    );
+  }
+
   if (status === 'error') {
     return (
       <div className="backup backup--error">
@@ -100,8 +126,8 @@ export default function BackupBar({ projects }) {
         <span className="backup__text">
           バックアップに失敗しました: {error}
           <br />
-          このフォルダに書けない場合は、ローカルのフォルダを選び直すか、
-          「ダウンロードで保存」で手元に残してください。
+          現在の設定先: <b>{dirName || '（未設定）'}</b>
+          {note && <> 　{note}</>}
         </span>
         <button type="button" className="btn btn--sm btn--primary" onClick={downloadNow}>
           ダウンロードで保存

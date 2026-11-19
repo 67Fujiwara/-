@@ -5,6 +5,7 @@ import { downloadTextFile } from '../lib/download.js';
 import {
   backupFileName,
   diagnoseBackup,
+  dirIsReachable,
   dirPermission,
   forgetBackupDir,
   isBackupSupported,
@@ -40,6 +41,7 @@ export function useAutoBackup(projects) {
   const [dirName, setDirName] = useState('');
   const [lastAt, setLastAt] = useState(readLast);
   const [error, setError] = useState('');
+  const [note, setNote] = useState('');
 
   const handleRef = useRef(null);
   const projectsRef = useRef(projects);
@@ -55,6 +57,11 @@ export function useAutoBackup(projects) {
     try {
       if ((await dirPermission(handle)) !== 'granted') {
         setStatus('need-permission');
+        return false;
+      }
+      // 許可は残っていてもフォルダ自体を見失っていることがある（名前の変更・移動・削除）
+      if (!(await dirIsReachable(handle))) {
+        setStatus('missing');
         return false;
       }
       const text = toExportJson(projectsRef.current);
@@ -112,7 +119,11 @@ export function useAutoBackup(projects) {
   const chooseFolder = useCallback(async () => {
     try {
       const handle = await pickBackupDir();
-      if (!handle) return;
+      if (!handle) {
+        setNote('フォルダを選ばずに閉じました。設定は変わっていません。');
+        return;
+      }
+      setNote('');
       handleRef.current = handle;
       setDirName(handle.name || '');
       allowWriteRef.current = true;
@@ -158,6 +169,7 @@ export function useAutoBackup(projects) {
     dirName,
     lastAt,
     error,
+    note,
     chooseFolder,
     grant,
     disable,
