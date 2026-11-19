@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useAutoBackup } from '../hooks/useAutoBackup.js';
 
 function formatStamp(iso) {
@@ -21,8 +22,35 @@ function daysSince(iso) {
  * データはブラウザの中にしか無いので、共有フォルダなどに JSON を残しておくための機能。
  */
 export default function BackupBar({ projects }) {
-  const { status, dirName, lastAt, error, chooseFolder, grant, disable, backupNow, downloadNow } =
-    useAutoBackup(projects);
+  const {
+    status,
+    dirName,
+    lastAt,
+    error,
+    chooseFolder,
+    grant,
+    disable,
+    backupNow,
+    downloadNow,
+    diagnose,
+  } = useAutoBackup(projects);
+  const [report, setReport] = useState(null);
+
+  const runDiagnose = async () => {
+    setReport([{ label: '調査中…', ok: true, detail: '' }]);
+    setReport(await diagnose());
+  };
+
+  const copyReport = async () => {
+    const text = (report || [])
+      .map((r) => `${r.ok ? 'OK ' : 'NG '} ${r.label}${r.detail ? ' / ' + r.detail : ''}`)
+      .join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      window.prompt('この内容をコピーして貼り付けてください', text);
+    }
+  };
 
   if (status === 'unsupported') return null;
 
@@ -84,6 +112,27 @@ export default function BackupBar({ projects }) {
         <button type="button" className="btn btn--sm btn--ghost" onClick={chooseFolder}>
           フォルダを選び直す
         </button>
+        <button type="button" className="btn btn--sm btn--ghost" onClick={runDiagnose}>
+          詳しく調べる
+        </button>
+        {report && (
+          <div className="backup__report">
+            <ul>
+              {report.map((r) => (
+                <li key={r.label} className={r.ok ? 'is-ok' : 'is-ng'}>
+                  <span className="backup__report-mark">{r.ok ? '✓' : '×'}</span>
+                  <span>
+                    {r.label}
+                    {r.detail && <em>{r.detail}</em>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <button type="button" className="btn btn--sm btn--ghost" onClick={copyReport}>
+              結果をコピー
+            </button>
+          </div>
+        )}
       </div>
     );
   }

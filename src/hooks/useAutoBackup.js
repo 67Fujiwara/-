@@ -4,6 +4,7 @@ import { hadStoredDataAtStartup, toExportJson } from '../lib/storage.js';
 import { downloadTextFile } from '../lib/download.js';
 import {
   backupFileName,
+  diagnoseBackup,
   dirPermission,
   forgetBackupDir,
   isBackupSupported,
@@ -140,6 +141,9 @@ export function useAutoBackup(projects) {
 
   const backupNow = useCallback(() => runBackup({ force: true }), [runBackup]);
 
+  /** 失敗の原因を切り分ける。結果の行を返す */
+  const diagnose = useCallback(() => diagnoseBackup(handleRef.current), []);
+
   /**
    * フォルダに書けないときの逃げ道。通常のダウンロードで保存する。
    * クラウド同期ドライブはフォルダへの直接書き込みを拒むことがあるため、
@@ -149,5 +153,16 @@ export function useAutoBackup(projects) {
     downloadTextFile(toExportJson(projectsRef.current), backupFileName(todayISO()));
   }, []);
 
-  return { status, dirName, lastAt, error, chooseFolder, grant, disable, backupNow, downloadNow };
+  return {
+    status,
+    dirName,
+    lastAt,
+    error,
+    chooseFolder,
+    grant,
+    disable,
+    backupNow,
+    downloadNow,
+    diagnose,
+  };
 }

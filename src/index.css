@@ -2334,3 +2334,52 @@ button.linkchip {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+
+/* バックアップ失敗時の調査結果 */
+.backup__report {
+  flex: 1 0 100%;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid #f3b9b9;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.backup__report ul {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.backup__report li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 2px 0;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.backup__report li em {
+  display: block;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.backup__report li.is-ng em {
+  color: var(--danger);
+}
+
+.backup__report-mark {
+  flex: none;
+  width: 14px;
+  text-align: center;
+  font-weight: 700;
+  color: #16a34a;
+}
+
+.backup__report li.is-ng .backup__report-mark {
+  color: var(--danger);
+}

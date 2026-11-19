@@ -111,7 +111,6 @@ export function backupFileName(iso) {
 /**
  * バックアップを1件書き出す。
  * どの段階で失敗したかが分かるよう、エラーに手順名と種類を添えて投げ直す。
- * （クラウド同期ドライブでは「作成はできるが確定できない」ことがある）
  */
 export async function writeBackup(handle, fileName, text) {
   const at = async (label, fn) => {
@@ -127,4 +126,85 @@ export async function writeBackup(handle, fileName, text) {
   const writable = await at('書き込みの開始', () => fileHandle.createWritable());
   await at('書き込み', () => writable.write(text));
   await at('保存の確定', () => writable.close());
+}
+
+/* ---------- 失敗したときの調査 ---------- */
+
+function errText(err) {
+  if (!err) return '原因不明';
+  return `${err.name || 'Error'}: ${err.message || '詳細なし'}`;
+}
+
+/**
+ * 選ばれているフォルダに対して、書き込みの手順を1つずつ試す。
+ * どこで止まるかを並べて返すので、失敗の原因を切り分けられる。
+ * 作った点検ファイルは最後に消す。元のファイルには触らない。
+ *
+ * fresh が true のときは、覚えているフォルダではなくその場で選び直したものを調べる
+ * （覚えている情報が古いのか、フォルダ自体が書けないのかを見分けるため）。
+ */
+export async function diagnoseBackup(handle) {
+  const rows = [];
+  const add = (label, ok, detail = '') => rows.push({ label, ok, detail });
+
+  add('開き方', true, location.protocol === 'file:' ? 'ファイルを直接開いている（file://）' : location.origin);
+  add('ブラウザ', true, navigator.userAgent.replace(/^Mozilla\/5\.0 /, ''));
+
+  if (!handle) {
+    add('フォルダの記憶', false, 'バックアップ先が設定されていません');
+    return rows;
+  }
+  add('フォルダの記憶', true, handle.name || '(名前なし)');
+
+  try {
+    const state =
+      typeof handle.queryPermission === 'function'
+        ? await handle.queryPermission({ mode: 'readwrite' })
+        : 'granted';
+    add('書き込みの許可', state === 'granted', state);
+    if (state !== 'granted') return rows;
+  } catch (err) {
+    add('書き込みの許可', false, errText(err));
+    return rows;
+  }
+
+  try {
+    let n = 0;
+    for await (const _name of handle.keys()) {
+      n += 1;
+      if (n >= 500) break;
+    }
+    add('フォルダの読み取り', true, `${n} 件見えました`);
+  } catch (err) {
+    add('フォルダの読み取り', false, errText(err));
+    return rows;
+  }
+
+  // 日本語を含まない単純な名前と、実際に使う名前の両方を試す
+  for (const name of ['_check.txt', backupFileName('0000-00-00')]) {
+    let fileHandle;
+    try {
+      fileHandle = await handle.getFileHandle(name, { create: true });
+      add(`ファイルの作成（${name}）`, true);
+    } catch (err) {
+      add(`ファイルの作成（${name}）`, false, errText(err));
+      continue;
+    }
+    try {
+      const writable = await fileHandle.createWritable();
+      await writable.write('check');
+      await writable.close();
+      add(`書き込み（${name}）`, true);
+    } catch (err) {
+      add(`書き込み（${name}）`, false, errText(err));
+    }
+    try {
+      await handle.removeEntry(name);
+      add(`後始末（${name}）`, true);
+    } catch (err) {
+      add(`後始末（${name}）`, false, errText(err));
+    }
+  }
+
+  return rows;
 }
