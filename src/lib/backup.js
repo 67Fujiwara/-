@@ -61,17 +61,28 @@ export async function loadBackupDir() {
   }
 }
 
-/** フォルダを選んでもらい、次回以降のために覚える。キャンセル時は null */
+/**
+ * フォルダを選んでもらい、次回以降のために覚える。
+ * 選べなかったときは { handle: null, reason } を返す。
+ * reason には理由（AbortError など）を入れる。環境によってはブラウザ側が
+ * 選択を拒むことがあり、その見分けがつかないと直しようがないため。
+ */
 export async function pickBackupDir() {
   let handle;
   try {
     handle = await window.showDirectoryPicker({ id: 'project-board-backup', mode: 'readwrite' });
   } catch (err) {
-    if (err?.name === 'AbortError') return null;
-    throw err;
+    const name = err?.name || 'Error';
+    return {
+      handle: null,
+      reason:
+        name === 'AbortError'
+          ? 'フォルダを選ばずに閉じたか、ブラウザ側が選択を受け付けませんでした（AbortError）'
+          : `${name}: ${err?.message || '詳細なし'}`,
+    };
   }
   await withStore('readwrite', (store) => store.put(handle, DIR_KEY));
-  return handle;
+  return { handle, reason: '' };
 }
 
 export async function forgetBackupDir() {

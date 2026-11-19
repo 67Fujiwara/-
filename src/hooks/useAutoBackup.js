@@ -118,9 +118,9 @@ export function useAutoBackup(projects) {
 
   const chooseFolder = useCallback(async () => {
     try {
-      const handle = await pickBackupDir();
+      const { handle, reason } = await pickBackupDir();
       if (!handle) {
-        setNote('フォルダを選ばずに閉じました。設定は変わっていません。');
+        setNote(`${reason} 設定は変わっていません。`);
         return;
       }
       setNote('');
@@ -162,6 +162,14 @@ export function useAutoBackup(projects) {
    */
   const downloadNow = useCallback(() => {
     downloadTextFile(toExportJson(projectsRef.current), backupFileName(todayISO()));
+    const stamp = new Date().toISOString();
+    try {
+      localStorage.setItem(LAST_KEY, stamp);
+    } catch {
+      // 記録できなくても保存自体はできているので続行する
+    }
+    setLastAt(stamp);
+    setNote('ダウンロードフォルダに保存しました。');
   }, []);
 
   return {

@@ -56,16 +56,23 @@ export default function BackupBar({ projects }) {
   if (status === 'unsupported') return null;
 
   if (status === 'off') {
+    const stale = daysSince(lastAt);
     return (
-      <div className="backup backup--warn">
+      <div className={`backup ${stale === null || stale >= 1 ? 'backup--warn' : ''}`}>
         <span className="backup__icon" aria-hidden="true">
           !
         </span>
         <span className="backup__text">
           データはこのブラウザの中だけに保存されています。
-          <b>バックアップ先フォルダ</b>を決めておくと、自動で書き出します。
+          <b>バックアップ先フォルダ</b>を決めると自動で書き出します。
+          フォルダが使えない環境では「ダウンロードで保存」でも構いません。
+          {lastAt && <> 　最終: {formatStamp(lastAt)}</>}
+          {note && <> 　{note}</>}
         </span>
-        <button type="button" className="btn btn--sm btn--primary" onClick={chooseFolder}>
+        <button type="button" className="btn btn--sm btn--primary" onClick={downloadNow}>
+          ダウンロードで保存
+        </button>
+        <button type="button" className="btn btn--sm btn--ghost" onClick={chooseFolder}>
           バックアップ先を選ぶ
         </button>
       </div>
@@ -102,6 +109,7 @@ export default function BackupBar({ projects }) {
         <span className="backup__text">
           バックアップ先のフォルダ（<b>{dirName || '設定済み'}</b>）が見つかりません。
           名前を変えた・移動した・削除した場合は、<b>選び直すまで元に戻りません</b>。
+          {lastAt && <> 　最終: {formatStamp(lastAt)}</>}
           {note && <> 　{note}</>}
         </span>
         <button type="button" className="btn btn--sm btn--primary" onClick={chooseFolder}>
