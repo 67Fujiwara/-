@@ -6,7 +6,9 @@
               段数を 1段に戻すと 2 段目の端子は 1 段目へ寄る。削除すると紐づけが外れる
               (タグは残る)。端子の並びは自然順 (9 の次が 10)
    ・rows    : 端子台配列の行に、内部側 (盤内) と外部側 (現場) の線番・接続先が入り、
-              同じ端子台の端子どうしの直結はジャンパに出る。丸のみの端子も行になる
+              同じ端子台の端子どうしの直結はジャンパに出る (接続先の欄からは外す)。
+              線番の無い線は線番の欄を空にする (端子表の「(直結)」は出さない)。
+              丸のみの端子も行になる
    ・page    : 「端子台配列を追加」は図面集の末尾に入り、端子台ごとの見出し
               (名前・段数・接続方式・型式・点数) と表が描かれる。印刷 SVG・DXF にも出る。
               端子が 36 行を超えると枚数が自動で増え、減れば自動で足した分だけ減る
@@ -59,7 +61,7 @@ const R = await p.evaluate(() => {
   App.labelRev++;
   const rows = stripRows(x1);
   const r1 = rows.find(r => r.num === "1"), r2 = rows.find(r => r.num === "2"), r4 = rows.find(r => r.num === "4");
-  out.rows = { n: rows.length, r1: r1 && { int: r1.int.num + "|" + r1.int.others.join(" "), ext: r1.ext.others.join(" "), jumper: r1.jumper },
+  out.rows = { n: rows.length, r1: r1 && { int: r1.int.num + "|" + r1.int.others.join(" "), ext: r1.ext.num + "|" + r1.ext.others.join(" "), jumper: r1.jumper },
     r2jumper: r2 && r2.jumper, r4: r4 && r4.int.others.join(" "), order: rows.map(r => r.num).join(",") };
   // ── page ──
   const nBefore = App.project.pages.length;
@@ -149,7 +151,7 @@ const checks = {
   noPageErrors: errs.length === 0,
   model: R.model.names === "-X1,-X2" && R.model.tag === "-X1:3" && R.model.tag2 === "-X2:3.2" && R.model.order === "3,9,10" &&
     R.model.levels === 2 && R.model.conn === "プッシュイン" && R.model.renamed === "-X5:3" && R.model.retyped.tag === "-X2:3" && R.model.retyped.level === 1,
-  rows: R.rows.n === 6 && R.rows.r1 && R.rows.r1.int === "201|-K1:A1" && R.rows.r1.ext === "-S1:14" && R.rows.r1.jumper === "2" && R.rows.r2jumper === "1" &&
+  rows: R.rows.n === 6 && R.rows.r1 && R.rows.r1.int === "201|-K1:A1" && R.rows.r1.ext === "|-S1:14" && R.rows.r1.jumper === "2" && R.rows.r2jumper === "1" &&
     R.rows.r4 === "-K2:A1" && R.rows.order === "1,2,3,4,9,10",
   page: R.page.last && R.page.name === "端子台配列" && R.page.head && R.page.rowText && R.page.blank && R.page.print && R.page.dxf && R.page.grew === 2 && R.page.shrank === 1,
   label: Math.abs(R.label.h0 - 3.5) < 0.01 && Math.abs(R.label.h5 - 5) < 0.01 && R.label.off.scr && R.label.off.prt && R.label.off.dxf && !R.label.off.shown && R.label.on,

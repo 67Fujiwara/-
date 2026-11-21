@@ -7,7 +7,7 @@
 /* アプリの版数。ヘッダーのアプリ名の横に V209・V210 … と出す (小数点なし)。
    開発開始からの通算の配布回数 (= 配布リポジトリのコミット数) に合わせて
    いて、機能追加・修正を配布するたびに 1 つ上げること */
-const APP_VERSION = 251;
+const APP_VERSION = 252;
 
 const GRID = 5;              // スナップグリッド 5mm
 /* 微調整の刻み。端子の張り出しが 5mm の倍数でない記号 (M12 コネクタなど) を
@@ -5315,8 +5315,9 @@ function stripRows(strip) {
     // ジャンパの欄に書く (EPLAN の端子台図と同じ見せ方)
     const mates = stripTerminals(strip).filter(o => o !== t && r && r.mates.has(o.dev.id));
     const mateTags = new Set(mates.map(o => o.dev.tag));
-    // 相手がいない側は線番の欄も空にする (端子表の「(直結)」は、相手が無いときは意味を持たない)
-    const strip2 = side => { const others = side.others.filter(lb => !mateTags.has(lb)); return { num: others.length ? side.num : "", others }; };
+    // 線番の無い線 (端子表では「(直結)」) と相手のいない側は、配列図では線番の欄を空にする
+    const strip2 = side => { const others = side.others.filter(lb => !mateTags.has(lb));
+      return { num: others.length && side.num !== "(直結)" ? side.num : "", others }; };
     const int_ = r ? strip2(r.int) : { num: "", others: [] }, ext = r ? strip2(r.ext) : { num: "", others: [] };
     return { dev: t.dev, page: t.page, num: t.num, level: t.level, int: int_, ext,
       jumper: mates.map(o => o.num + (stripLevels(strip) > 1 ? `.${o.level}` : "")).join(" "), typeRef: t.dev.typeRef || "" };
