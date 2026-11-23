@@ -1375,6 +1375,7 @@ const MENUS = {
     { sep: true },
     { label: "設計完了 (DXF + PDF を出力)…", key: "", fn: () => UI.finishDesign() },
     { label: "設計完了履歴…", key: "", fn: () => UI.openReleaseHistory() },
+    { label: "設計完了した図面を閲覧…", key: "", fn: () => UI.openReleasePage() },
   ],
   edit: [
     { label: "シンボルデータベース…", key: "", fn: () => UI.openSymDB() },
@@ -3619,6 +3620,7 @@ async function boot() {
   UI.updateSaveButton();
   document.getElementById("btnAIWizard").addEventListener("click", UI.openWizard);
   document.getElementById("btnRelease").addEventListener("click", () => UI.finishDesign());
+  document.getElementById("btnRelView").addEventListener("click", () => UI.openReleasePage());
   UI.updateReleaseBadge();
   document.getElementById("btnZoomIn").addEventListener("click", () => UI.zoomCenter(1.25));
   document.getElementById("btnZoomOut").addEventListener("click", () => UI.zoomCenter(0.8));
