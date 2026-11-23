@@ -587,7 +587,7 @@ function bindPnDraw(pane) {
            仮番号 1,2,3… を消せる)。記号どおりに戻したいときは既定値を入れ直す。
            結線図の枠記号 (端子名を外郭内に描く) と端子台は対象外 */
         const pins2 = sym.pins || [];
-        if (!pins2.length || pins2.length > 12 || sym.ioSheet || symBaseIdOf(dev.sym) === "terminal") return "";
+        if (!pins2.length || pins2.length > 12 || sym.ioSheet || isTerminalSymId(symBaseIdOf(dev.sym))) return "";
         const rows = pins2.map((p2, i) => {
           if (p2.inBody) return "";
           const auto = autoPinName(dev, i);

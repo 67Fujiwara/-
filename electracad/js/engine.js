@@ -7,7 +7,7 @@
 /* アプリの版数。ヘッダーのアプリ名の横に V209・V210 … と出す (小数点なし)。
    開発開始からの通算の配布回数 (= 配布リポジトリのコミット数) に合わせて
    いて、機能追加・修正を配布するたびに 1 つ上げること */
-const APP_VERSION = 252;
+const APP_VERSION = 253;
 
 const GRID = 5;              // スナップグリッド 5mm
 /* 微調整の刻み。端子の張り出しが 5mm の倍数でない記号 (M12 コネクタなど) を
@@ -1102,7 +1102,7 @@ function pinLabelVisible(page, dev, pinIdx) {
   const p = sym.pins[pinIdx];
   // inBody: 端子名を記号の body に描いてある (入出力結線図の枠記号)。
   // 二重に打つと外郭の縁で重なるので、自動ラベルは出さない
-  if (!p || p.inBody || symBaseIdOf(dev.sym) === "terminal") return null;
+  if (!p || p.inBody || isTerminalSymId(symBaseIdOf(dev.sym))) return null;
   // 名前の無い端子でも、プロパティで番号を入れれば印字する (入力が正)
   const name = effectivePinName(dev, pinIdx);
   if (!name) return null;
@@ -3693,7 +3693,7 @@ function autoNumberWires() {
       });
       page.devices.forEach(dev => {          // 次に端子台の器具番号
         const b2 = symBaseIdOf(dev.sym);
-        if (b2 !== "terminal" && b2 !== "term_dot") return;
+        if (!isTerminalSymId(b2) && b2 !== "term_dot") return;
         const nm = String(dev.tag || "").replace(/^-/, "").trim();
         devPins(dev).forEach((pin2, i) => nameNet(pinNet(dev, i), nm));
       });
@@ -3887,7 +3887,7 @@ function chainIoWireNumbers(page, wire, num) {
    (端子の記号は 20mm 幅、PLC の行ピッチは 15〜35mm — その並びまでは 1 本の台) */
 const TERM_STRIP_GAP = 35;
 function terminalStripFrom(page, wire) {
-  const isTerm = d => { const b2 = symBaseIdOf(d.sym); return b2 === "terminal" || b2 === "term_dot"; };
+  const isTerm = d => { const b2 = symBaseIdOf(d.sym); return isTerminalSymId(b2) || b2 === "term_dot"; };
   const ends = [wire.pts[0], wire.pts[wire.pts.length - 1]];
   const onDev = d => devPins(d).some(a => ends.some(pt => Math.abs(pt[0] - a.x) < .01 && Math.abs(pt[1] - a.y) < .01));
   const t0 = page.devices.find(d => isTerm(d) && onDev(d));
@@ -5139,10 +5139,10 @@ function buildBOM() {
     const symId = sym.stretchOf || sym.id;
     if (BOM_EXCLUDE.has(symId)) return;
     // 端子は本数だけ数える (タグ -X1:n を -X1 に集約)
-    const baseTag = symId === "terminal" ? (dev.tag || "-X1").split(":")[0] : null;
+    const baseTag = isTerminalSymId(symId) ? (dev.tag || "-X1").split(":")[0] : null;
     /* 入出力結線図のように 1 台を複数枚で描く記号は、機種とタグでまとめる
        (記号 id で分けると、1 台の PLC が枚数ぶん部品表に並ぶ) */
-    const key = symId === "terminal" ? "terminal|" + baseTag
+    const key = isTerminalSymId(symId) ? "terminal|" + baseTag
       : sym.unitSheet ? "unit|" + (dev.typeRef || sym.typ || "") + "|" + (dev.tag || "")
       : symId + "|" + (dev.typeRef || "");
     // 多芯ケーブルは 1 本の物理ケーブルなので、心線囲みと遮へいを 1 行にまとめる
@@ -5204,7 +5204,7 @@ function buildConnectionList() {
         if (!net) return;
         if (!netPins.has(net)) netPins.set(net, []);
         const sym = symOf(dev.sym);
-        const label = symBaseIdOf(dev.sym) === "terminal" || sym.sim === "link"
+        const label = isTerminalSymId(symBaseIdOf(dev.sym)) || sym.sim === "link"
           ? (dev.tag || sym.name)
           : `${displayTag(dev) || sym.name}:${effectivePinName(dev, pin.idx) || pin.idx + 1}`;
         if (!netPins.get(net).includes(label)) netPins.get(net).push(label); // 端子等の重複列挙を防ぐ
@@ -5252,10 +5252,20 @@ function stripAdd(opts = {}) {
   list.push(s);
   return s;
 }
-/** 端子記号か (端子 / 丸のみの端子) */
+/** 端子台の 1 点の記号 (1段用 / 2段用) か */
+function isTerminalSymId(id) { return id === "terminal" || id === "terminal2"; }
+/** 端子記号か (端子 / 2段端子 / 丸のみの端子) */
 function isTerminalDev(dev) {
   const b = symBaseIdOf(dev && dev.sym);
-  return b === "terminal" || b === "term_dot";
+  return isTerminalSymId(b) || b === "term_dot";
+}
+/** 端子台の段数に合わせて記号を入れ替える (1段 = 端子 / 2段以上 = 端子 (2段))。
+    端子の位置は同じなので配線はそのまま。丸のみの端子は変えない */
+function termSyncSym(dev, strip) {
+  const b = symBaseIdOf(dev.sym);
+  if (!isTerminalSymId(b)) return;
+  const want = stripLevels(strip) > 1 ? "terminal2" : "terminal";
+  if (b !== want) dev.sym = want;
 }
 /** 紐づいた端子のタグ: -X1:3、2段以上の端子台は段を付けて -X1:3.2 (段ごとに別の端子) */
 function termTagFor(strip, num, level) {
@@ -5271,6 +5281,7 @@ function termLink(dev, stripId, num, level) {
   if (num != null) dev.props.term = String(num).trim();
   dev.props.level = Math.min(stripLevels(strip), Math.max(1, parseInt(level || dev.props.level || 1, 10) || 1));
   dev.tag = termTagFor(strip, dev.props.term || "", dev.props.level);
+  termSyncSym(dev, strip);
 }
 /** 端子台の端子 (全ページ)。端子番号の自然順・段順 */
 function stripTerminals(strip) {
@@ -5302,6 +5313,7 @@ function stripRetype(strip, type) {
   stripTerminals(strip).forEach(t => {
     if (t.dev.props.level > stripLevels(strip)) t.dev.props.level = 1;
     t.dev.tag = termTagFor(strip, t.num, t.dev.props.level);
+    termSyncSym(t.dev, strip);
   });
 }
 /** 端子台配列の行: 端子ごとの内部/外部の線番と接続先、同じ端子台の端子どうしの
@@ -5370,7 +5382,7 @@ function stripsEnsurePages() {
 /** 端子表: 端子ごとの内部/外部接続。
     "split" モード (端子を開いた状態) で解析し、端子の両側を区別する */
 function buildTerminalList() {
-  return buildTerminalListDetail().filter(r => symBaseIdOf(r.dev.sym) === "terminal").map(r => ({ tag: r.tag, page: r.page, int: r.int, ext: r.ext }));
+  return buildTerminalListDetail().filter(r => isTerminalSymId(symBaseIdOf(r.dev.sym))).map(r => ({ tag: r.tag, page: r.page, int: r.int, ext: r.ext }));
 }
 /** 端子表の詳細 (機器そのもの・同じネットにいる端子の id も返す — 端子台配列用) */
 function buildTerminalListDetail() {
@@ -5388,7 +5400,7 @@ function buildTerminalListDetail() {
     }));
     const pinLabel = (d, idx) => {
       const s = symOf(d.sym);
-      if (symBaseIdOf(d.sym) === "terminal" || s.sim === "link") return d.tag || s.name;
+      if (isTerminalSymId(symBaseIdOf(d.sym)) || s.sim === "link") return d.tag || s.name;
       return `${displayTag(d) || s.name}:${effectivePinName(d, idx) || idx + 1}`;
     };
     page.devices.forEach(dev => {

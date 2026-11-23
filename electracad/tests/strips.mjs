@@ -19,7 +19,10 @@
               付いて入力が無効になる。明示の表示チェックと文字高の欄で tagOff/tagH が変わる
    ・dialog  : プロジェクト › 端子台… で一覧が出て、追加・名前/段数/接続方式/型式の変更が
               適用で反映される
-   ・bom     : 部品表の端子のまとめ (端子台ごとの点数) と端子表 CSV は今までどおり */
+   ・bom     : 部品表の端子のまとめ (端子台ごとの点数) と端子表 CSV は今までどおり
+   ・sym2    : 2段用の記号「端子 (2段)」(二重丸) がパレットにあり、2段以上の端子台へ紐づけると
+              端子の記号が自動で入れ替わる (位置・配線はそのまま)。1段に戻すと元の記号へ戻る。
+              2段の記号も部品表では端子台ごとにまとまり、端子表 CSV に載る */
 import { chromium } from "playwright-core";
 const b = await chromium.launch({
   executablePath: process.env.CHROME || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
@@ -139,11 +142,35 @@ const R = await p.evaluate(() => {
   const t7 = addDevice(pg, "terminal", 400, 300, {}); termLink(t7, x7.id, "5", 1);
   stripRemove(x7.id);
   out.dialog.removed = !projectStrips().some(s2 => s2.id === x7.id) && !(t7.props && t7.props.strip) && t7.tag === "-X7:5.1";   // 3段の端子台なので段付き
+  // ── sym2 ──
+  const s2 = SYMBOLS_BY_ID.terminal2;
+  UI.buildPalette();
+  out.sym2 = { has: !!s2 && s2.sim === "passthru" && s2.pins.length === 2 && (s2.body.match(/<circle/g) || []).length === 2,
+    palette: [...document.querySelectorAll("#symTree .sym-name")].some(e => e.textContent === "端子 (2段)"),
+    swapped: d2.sym === "terminal2" && t9.sym === "terminal",            // d2 は 2段の -X2、t9 は 1段の -X1
+    pinsSame: JSON.stringify(SYMBOLS_BY_ID.terminal2.pins) === JSON.stringify(SYMBOLS_BY_ID.terminal.pins) };
+  const wx = addWire(pg, [[220, 80], [220, 60]]);                           // d2 (220,60) につながる線
+  stripRetype(x2, "single");
+  out.sym2.back = d2.sym === "terminal" && d2.tag === "-X2:3" && pg.wires.includes(wx);
+  stripRetype(x2, "double"); termLink(d2, x2.id, "3", 2);
+  out.sym2.again = d2.sym === "terminal2" && d2.tag === "-X2:3.2";
+  dot.props.level = 1; termLink(dot, x2.id, "8", 1); out.sym2.dotKept = dot.sym === "term_dot"; termLink(dot, x1.id, "4", 1);
+  // 置いたばかりの端子を 2段の端子台へ紐づけた瞬間に入れ替わる / 端子でない機器の記号は触らない
+  const tNew = addDevice(pg, "terminal", 400, 400, {}); termLink(tNew, x2.id, "9", 1);
+  const notT = addDevice(pg, "coil", 440, 400, { tag: "-K9" }); termLink(notT, x2.id, "9", 2);
+  out.sym2.fresh = tNew.sym === "terminal2"; out.sym2.notTerminal = notT.sym === "coil";
+  pg.devices.splice(pg.devices.indexOf(notT), 1);
   // ── bom / csv ──
   const bom = buildBOM();
   const rowsB = (bom.rows || bom);
   const term = rowsB.find(r => JSON.stringify(r).includes("-X1"));
-  out.bom = { term: !!term, csv: /-X1:1/.test(terminalCSV()) && !/-X1:4/.test(terminalCSV()) };
+  // 2段の端子も端子台ごとに 1 行 (-X2 は d2・tNew の 2 点、-X3 は 1 点)。記号の種類で混ざらない
+  const x3 = stripAdd({ type: "double" }); const t3b = addDevice(pg, "terminal", 480, 400, {}); termLink(t3b, x3.id, "1", 1);
+  const bom2 = buildBOM(), rowsB2 = bom2.rows || bom2;
+  const rX2 = rowsB2.filter(r => r.tags && r.tags.some(t => /^-X2:/.test(t)));
+  const rX3 = rowsB2.filter(r => r.tags && r.tags.some(t => /^-X3:/.test(t)));
+  out.bom = { term: !!term, term2: rX2.length === 1 && rX2[0].tags.length === 2 && rX2[0].tags.every(t => /^-X2:/.test(t)) &&
+      rX3.length === 1 && rX3[0].tags.length === 1 && rX3[0].tags[0] === "-X3:1.1", csv: /-X1:1/.test(terminalCSV()) && !/-X1:4/.test(terminalCSV()) && /-X2:3\.2/.test(terminalCSV()) };
   return out;
 });
 
@@ -158,7 +185,8 @@ const checks = {
   props: R.props.has && R.props.tagDisabled && R.props.stripVal && R.props.levelDisabled && R.props.moved.tag === "-X2:9.1" && R.props.moved.levelEnabled &&
     R.props.level2 === "-X2:9.2" && R.props.renum === "-X2:12.2" && R.props.off && R.props.tagH === 5 && R.props.unlinked.strip && R.props.unlinked.tag === "-X2:12.2" && R.props.unlinked.enabled,
   dialog: R.dialog.rows === 2 && R.dialog.added && R.dialog.renamed && R.dialog.part && R.dialog.closed && R.dialog.removed,
-  bom: R.bom.term && R.bom.csv,
+  bom: R.bom.term && R.bom.term2 && R.bom.csv,
+  sym2: R.sym2.has && R.sym2.palette && R.sym2.swapped && R.sym2.pinsSame && R.sym2.back && R.sym2.again && R.sym2.dotKept && R.sym2.fresh && R.sym2.notTerminal,
 };
 const bad = Object.entries(checks).filter(([, v]) => !v);
 console.log(JSON.stringify({ checks, R, errs: errs.slice(0, 3) }, null, 1));
